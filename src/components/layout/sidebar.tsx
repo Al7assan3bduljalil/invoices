@@ -20,7 +20,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
       {open && <div className="fixed inset-0 bg-black/40 z-20 lg:hidden" onClick={onClose} />}
 
       <aside className={cn(
-        "fixed top-0 end-0 h-full w-64 bg-card border-s z-30 flex flex-col transition-transform duration-200",
+        "fixed top-0 start-0 h-full w-64 bg-card border-e z-30 flex flex-col transition-transform duration-200",
         "lg:translate-x-0 lg:static lg:z-auto",
         open ? "translate-x-0" : "translate-x-full lg:translate-x-0",
       )}>

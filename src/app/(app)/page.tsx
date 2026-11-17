@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getDashboardStats } from "@/server/stats";
 import { getCurrentUser } from "@/server/current-user";
 import { DashboardClient } from "./dashboard-client";

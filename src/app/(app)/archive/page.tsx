@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { getCurrentUser } from "@/server/current-user";
 import { listInvoices } from "@/server/invoices";
