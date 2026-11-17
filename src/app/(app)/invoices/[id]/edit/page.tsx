@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/server/current-user";
 import { getInvoice } from "@/server/invoices";

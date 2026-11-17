@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getCurrentUser } from "@/server/current-user";
 import { prisma } from "@/lib/prisma";
 import { serializeProduct } from "@/server/serialize";
