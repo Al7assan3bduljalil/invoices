@@ -9,7 +9,7 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   if (!aiEnabled()) {
     return Response.json(
-      { error: "المساعد الذكي غير مفعّل. أضف ANTHROPIC_API_KEY إلى ملف .env" },
+      { error: "المساعد الذكي غير مفعّل. أضف GOOGLE_GENERATIVE_AI_API_KEY إلى ملف .env" },
       { status: 503 },
     );
   }
