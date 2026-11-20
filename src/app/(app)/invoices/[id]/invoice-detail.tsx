@@ -82,6 +82,12 @@ export function InvoiceDetail({ invoice: inv }: { invoice: InvoiceDTO }) {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/print/invoice/${inv.id}?type=invoice`}>🖨️ طباعة فاتورة</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/print/invoice/${inv.id}?type=quote`}>📄 طباعة عرض سعر</Link>
+          </Button>
           <Button variant="outline" size="sm" onClick={copyShare}>🔗 مشاركة</Button>
           <Button variant="outline" size="sm" asChild>
             <a href={shareUrl} target="_blank" rel="noopener noreferrer">👁️ معاينة الزبون</a>

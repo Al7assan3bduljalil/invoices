@@ -9,6 +9,7 @@ const NAV = [
   { href: "/archive", label: "الأرشيف", icon: "🗄️" },
   { href: "/clients", label: "العملاء", icon: "👥" },
   { href: "/products", label: "المنتجات والخدمات", icon: "📦" },
+  { href: "/print/letter", label: "خطاب رسمي (ترويسة)", icon: "📝" },
   { href: "/settings", label: "الإعدادات", icon: "⚙️" },
 ];
 
