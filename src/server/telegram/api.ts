@@ -9,7 +9,10 @@ export type TgMessage = {
   date: number;
   text?: string;
   caption?: string;
+  voice?: TgVoice;
+  audio?: TgVoice;
 };
+export type TgVoice = { file_id: string; duration?: number; mime_type?: string; file_size?: number };
 export type TgUpdate = { update_id: number; message?: TgMessage; edited_message?: TgMessage };
 
 export function telegramEnabled() {
@@ -28,6 +31,18 @@ async function call<T = unknown>(method: string, body: Record<string, unknown>):
   const data = (await res.json().catch(() => ({}))) as { ok?: boolean; result?: T; description?: string };
   if (!data.ok) throw new Error(`Telegram ${method} فشل: ${data.description ?? res.status}`);
   return data.result as T;
+}
+
+/** تنزيل ملف (مثل رسالة صوتية) من خوادم Telegram */
+export async function downloadFile(fileId: string): Promise<Uint8Array> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error("TELEGRAM_BOT_TOKEN غير مضبوط");
+  const info = await call<{ file_path?: string }>("getFile", { file_id: fileId });
+  if (!info.file_path) throw new Error("Telegram لم يُرجع مسار الملف");
+  const apiBase = process.env.TELEGRAM_API_BASE || "https://api.telegram.org";
+  const res = await fetch(`${apiBase}/file/bot${token}/${info.file_path}`);
+  if (!res.ok) throw new Error(`تعذر تنزيل الملف من Telegram: ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 export function sendChatAction(chatId: number, action: "typing" = "typing") {

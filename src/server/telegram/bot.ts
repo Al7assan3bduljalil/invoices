@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/server/current-user";
 import { aiEnabled, getModel } from "@/server/ai/model";
 import { systemPrompt } from "@/server/ai/prompt";
 import { buildTools } from "@/server/ai/tools";
-import { sendChatAction, sendMessage, type TgMessage, type TgUpdate } from "./api";
+import { downloadFile, sendChatAction, sendMessage, type TgMessage, type TgUpdate } from "./api";
 import { absolutize, markdownToTelegramHtml } from "./format";
 
 /** معرّفات حسابات Telegram المسموح لها باستخدام البوت (TELEGRAM_ALLOWED_USER_IDS=123,456) */
@@ -58,11 +58,42 @@ function telegramPrompt(base: string, appUrl: string) {
 - اجعل الردود قصيرة ومناسبة لشاشة الهاتف.`;
 }
 
+const MAX_VOICE_BYTES = 10 * 1024 * 1024;
+const MAX_VOICE_SECONDS = 180;
+
+/** تحويل رسالة صوتية إلى نص عربي باستخدام Gemini (يفهم الصوت مباشرة) */
+async function transcribeVoice(msg: TgMessage): Promise<string> {
+  const v = msg.voice ?? msg.audio!;
+  const bytes = await downloadFile(v.file_id);
+  const { text } = await generateText({
+    model: getModel(),
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              "فرّغ هذه الرسالة الصوتية حرفياً إلى نص. المتحدث يطلب من مساعد فوترة (عروض أسعار، أصناف، عملاء، فواتير)، " +
+              "وغالباً بالعربية بلهجة عامية وقد يذكر أسماء أصناف وأرقاماً وأسعاراً. اكتب الأرقام بالأرقام (10 وليس عشرة) " +
+              "وأبقِ أسماء الأصناف والعلامات التجارية كما نُطقت. أعد النص فقط بدون أي شرح. " +
+              "إذا لم تسمع كلاماً واضحاً فأعد كلمة: [غير واضح]",
+          },
+          { type: "file", data: bytes, mediaType: v.mime_type || "audio/ogg" },
+        ],
+      },
+    ],
+  });
+  return text.trim();
+}
+
 const HELP = `أهلاً 👋 أنا مساعد الفوترة.
 اكتب لي طلبك بالعربي، مثلاً:
 • جهّز عرض سعر لشركة النور: 10 كابل شبكة و 2 راوتر
 • أضف صنف جديد: كاميرا مراقبة خارجية 4MP بسعر 85 دينار للقطعة
 • كم مبيعات هذا الشهر؟
+
+🎙 يمكنك أيضاً إرسال رسالة صوتية وسأفهمها وأنفذها كأنك كتبتها.
 
 الأوامر:
 /new بدء محادثة جديدة (مسح السياق)
@@ -131,8 +162,30 @@ async function processUpdate(update: TgUpdate, baseUrl: string) {
     );
     return;
   }
+  const voice = msg.voice ?? msg.audio;
+  if (!text && voice) {
+    if ((voice.duration ?? 0) > MAX_VOICE_SECONDS || (voice.file_size ?? 0) > MAX_VOICE_BYTES) {
+      await sendMessage(msg.chat.id, "الرسالة الصوتية طويلة. أرسل رسالة أقصر من 3 دقائق من فضلك.", msg.message_id);
+      return;
+    }
+    await sendChatAction(msg.chat.id);
+    let heard = "";
+    try {
+      heard = aiEnabled() ? await transcribeVoice(msg) : "";
+    } catch (err) {
+      console.error("Telegram voice transcription failed", err);
+    }
+    if (!heard || heard === "[غير واضح]") {
+      await sendMessage(msg.chat.id, "لم أستطع فهم الرسالة الصوتية، أعد إرسالها بصوت أوضح أو اكتب طلبك.", msg.message_id);
+      return;
+    }
+    // نعرض ما فُهم ليتأكد المستخدم، ثم ننفذه كأنه نص مكتوب (نفس الصلاحيات والتأكيدات)
+    await sendMessage(msg.chat.id, `🎙 سمعتك تقول:\n<i>${heard.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</i>`, msg.message_id);
+    await runAgent(msg, heard, baseUrl);
+    return;
+  }
   if (!text) {
-    await sendMessage(msg.chat.id, "أرسل طلبك كنص من فضلك.", msg.message_id);
+    await sendMessage(msg.chat.id, "أرسل طلبك كنص أو رسالة صوتية من فضلك.", msg.message_id);
     return;
   }
   if (/^\/(start|help)\b/.test(text)) {
