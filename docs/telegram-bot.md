@@ -1,0 +1,32 @@
+# بوت Telegram لمساعد الفوترة
+
+يتيح البوت التحدث مع مساعد الفوترة (Gemini) من Telegram بنفس أدوات المساعد في الموقع:
+تجهيز عروض الأسعار لعميل حسب الأصناف، التعرف على الأصناف من الوصف الحر، وإضافة أصناف جديدة للكتالوج.
+
+## الإعداد (مرة واحدة)
+
+1. أنشئ بوتاً من [@BotFather](https://t.me/BotFather) بالأمر `/newbot` وانسخ التوكن.
+2. أضف المتغيرات إلى ملف `.env` على الخادم (وتأكد أن docker compose يمررها للحاوية):
+   ```
+   TELEGRAM_BOT_TOKEN="123456:ABC..."
+   TELEGRAM_WEBHOOK_SECRET="$(openssl rand -hex 32)"
+   TELEGRAM_ALLOWED_USER_IDS=""        # يُملأ في الخطوة 5
+   APP_URL="https://invo.atmata.ly"
+   ```
+3. أعد بناء الحاوية وتشغيلها.
+4. سجّل الـ webhook:
+   ```
+   curl -X POST https://invo.atmata.ly/api/telegram/setup -H "Authorization: Bearer <TELEGRAM_WEBHOOK_SECRET>"
+   ```
+5. أرسل `/id` للبوت، ضع الرقم الظاهر في `TELEGRAM_ALLOWED_USER_IDS` ثم أعد تشغيل الحاوية.
+
+## الأمان
+- البوت يرفض أي حساب غير موجود في `TELEGRAM_ALLOWED_USER_IDS` ولا يشغّل المساعد له.
+- كل طلب webhook يجب أن يحمل السر `TELEGRAM_WEBHOOK_SECRET` في الترويسة التي يرسلها Telegram.
+
+## الأوامر
+- `/start` تعليمات وأمثلة
+- `/new` بدء محادثة جديدة (مسح السياق)
+- `/id` معرّف حسابك
+
+ذاكرة المحادثة في ذاكرة الخادم (آخر 40 رسالة، تنتهي بعد 3 ساعات خمول أو عند إعادة التشغيل).

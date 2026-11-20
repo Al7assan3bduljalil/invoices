@@ -48,6 +48,43 @@ async function findClients(userId: string, query: string) {
   });
 }
 
+/**
+ * البحث في الكتالوج بالاسم والوصف: أولاً العبارة كاملة، ثم كل الكلمات معاً، ثم أي كلمة.
+ * يتجاهل "ال" التعريف في بداية الكلمات ليتطابق "الكابل" مع "كابل".
+ */
+async function findProducts(userId: string, query?: string) {
+  const base = { userId, isActive: true };
+  const q = query?.trim();
+  if (!q) return prisma.product.findMany({ where: base, take: 100, orderBy: { name: "asc" } });
+
+  const field = (w: string) => [
+    { name: { contains: w, mode: "insensitive" as const } },
+    { description: { contains: w, mode: "insensitive" as const } },
+  ];
+  const words = [
+    ...new Set(
+      q
+        .split(/[\s،,/\-]+/)
+        .map((w) => w.replace(/^(وال|بال|لل|ال)(?=\S{2,})/, ""))
+        .filter((w) => w.length > 1),
+    ),
+  ];
+  const attempts = [
+    { OR: field(q) },
+    ...(words.length > 1 ? [{ AND: words.map((w) => ({ OR: field(w) })) }] : []),
+    ...(words.length ? [{ OR: words.flatMap(field) }] : []),
+  ];
+  for (const cond of attempts) {
+    const rows = await prisma.product.findMany({
+      where: { ...base, ...cond },
+      take: 30,
+      orderBy: { name: "asc" },
+    });
+    if (rows.length) return rows;
+  }
+  return [];
+}
+
 const brief = (i: Awaited<ReturnType<typeof listInvoices>>[number]) => ({
   id: i.id,
   number: i.number,
@@ -84,21 +121,43 @@ export function buildTools(userId: string) {
 
     searchProducts: tool({
       description:
-        "البحث في كتالوج المنتجات والخدمات وأسعارها. استخدمها لمطابقة البنود المطلوبة مع الكتالوج والحصول على السعر الرسمي.",
+        "البحث في كتالوج المنتجات والخدمات وأسعارها (بالاسم والوصف، وتطابق جزئي بالكلمات). " +
+        "استخدمها لمطابقة البنود التي يصفها المستخدم مع الكتالوج والحصول على السعر الرسمي. " +
+        "إن لم تجد نتيجة فجرّب كلمة مفتاحية أقصر أو مرادفاً، أو اترك query فارغاً لعرض الكتالوج كاملاً.",
       inputSchema: z.object({
-        query: z.string().optional().describe("اسم المنتج أو جزء منه، اتركه فارغاً لعرض الكل"),
+        query: z.string().optional().describe("اسم المنتج أو وصفه أو كلمات منه، اتركه فارغاً لعرض الكل"),
       }),
-      execute: async ({ query }) => {
-        const rows = await prisma.product.findMany({
-          where: {
-            userId,
-            isActive: true,
-            ...(query ? { name: { contains: query, mode: "insensitive" as const } } : {}),
-          },
-          take: 50,
-          orderBy: { name: "asc" },
+      execute: async ({ query }) => (await findProducts(userId, query)).map(serializeProduct),
+    }),
+
+    createProduct: tool({
+      description:
+        "إضافة صنف (منتج أو خدمة) جديد إلى الكتالوج. استخدمها فقط بعد التأكد عبر searchProducts أن الصنف غير موجود، " +
+        "وبعد أن يحدد المستخدم السعر أو يوافق عليه. لا تخترع سعراً أبداً.",
+      inputSchema: z.object({
+        name: z.string().min(1).describe("اسم الصنف واضحاً ومختصراً كما يُعرض في الفاتورة"),
+        price: z.number().min(0).describe("سعر الوحدة"),
+        unit: z.string().optional().describe("وحدة القياس مثل: قطعة، متر، كرتونة، ساعة، خدمة"),
+        description: z.string().optional().describe("وصف إضافي أو مواصفات"),
+        taxRate: z.number().min(0).max(100).optional().describe("نسبة ضريبة خاصة بالصنف إن وُجدت"),
+      }),
+      execute: async ({ name, price, unit, description, taxRate }) => {
+        const existing = await prisma.product.findFirst({
+          where: { userId, isActive: true, name: { equals: name.trim(), mode: "insensitive" } },
         });
-        return rows.map(serializeProduct);
+        if (existing)
+          return { error: "يوجد صنف بنفس الاسم في الكتالوج", product: serializeProduct(existing) };
+        const p = await prisma.product.create({
+          data: {
+            userId,
+            name: name.trim(),
+            price,
+            unit: unit?.trim() || "وحدة",
+            description: description?.trim() || null,
+            taxRate: taxRate ?? null,
+          },
+        });
+        return { created: true, product: serializeProduct(p) };
       },
     }),
 
@@ -160,7 +219,13 @@ export function buildTools(userId: string) {
           },
           { createdByAI: true },
         );
-        return { ...brief(inv), subtotal: inv.subtotal, taxAmount: inv.taxAmount, items: inv.items };
+        return {
+          ...brief(inv),
+          publicUrl: `/inv/${inv.shareToken}`,
+          subtotal: inv.subtotal,
+          taxAmount: inv.taxAmount,
+          items: inv.items,
+        };
       },
     }),
 
