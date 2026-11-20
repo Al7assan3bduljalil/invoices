@@ -9,7 +9,7 @@ const NAV = [
   { href: "/archive", label: "الأرشيف", icon: "🗄️" },
   { href: "/clients", label: "العملاء", icon: "👥" },
   { href: "/products", label: "المنتجات والخدمات", icon: "📦" },
-  { href: "/print/letter", label: "خطاب رسمي (ترويسة)", icon: "📝" },
+  { href: "/letters", label: "المراسلات", icon: "✉️" },
   { href: "/settings", label: "الإعدادات", icon: "⚙️" },
 ];
 
@@ -42,7 +42,7 @@ export function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => voi
             <Link key={item.href} href={item.href}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors",
-                path === item.href
+                (item.href === "/" ? path === "/" : path === item.href || path.startsWith(item.href + "/"))
                   ? "bg-blue-50 text-blue-700 font-medium dark:bg-blue-950 dark:text-blue-300"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
