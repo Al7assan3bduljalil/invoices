@@ -203,6 +203,32 @@ body {
 .lh-letter-sign-box + .lh-sign-label { margin-top: 0; }
 .lh-letter-cc { margin-top: 8mm; font-size: 10pt; color: #374151; }
 
+/* شعار مرفوع بدل الشعار المرسوم */
+.lh-logo-img { height: 16mm; max-width: 70mm; width: auto; object-fit: contain; display: block; }
+.lh-watermark-img { width: 100%; height: auto; display: block; opacity: .07; filter: grayscale(1); }
+/* الترويسة مطفأة: تُحجز المساحة فقط للورق المطبوع مسبقاً */
+.lh-plain { box-shadow: 0 10px 30px rgba(15,23,42,.15), inset 0 38mm 0 #f8fafc; }
+@media print { .lh-plain { box-shadow: none; } }
+
+/* كتلة التوقيع والختم (حجم وموضع من الإعدادات) */
+.lh-signblock { display: flex; gap: 10mm; margin-top: 10mm; padding: 0 4mm; break-inside: avoid; }
+.lh-signblock.lh-pos-start { justify-content: flex-start; }
+.lh-signblock.lh-pos-center { justify-content: center; }
+.lh-signblock.lh-pos-end { justify-content: flex-end; }
+.lh-signcell { width: 58mm; text-align: center; }
+.lh-signatory { font-weight: 700; font-size: 11pt; color: #111827; min-height: 6mm; outline: none; }
+.lh-signatory-ghost { visibility: hidden; }
+.lh-signbox, .lh-signstack { display: flex; align-items: center; justify-content: center; position: relative; }
+.lh-sig-img { max-width: 56mm; width: auto; object-fit: contain; position: relative; z-index: 1; }
+.lh-stamp-img { object-fit: contain; opacity: .9; mix-blend-mode: multiply; }
+.lh-stamp-over { position: absolute; left: 50%; top: 50%; translate: -30% -50%; z-index: 2; }
+.lh-signblock .lh-sign-label { margin-top: 1mm; }
+
+/* معاينة مصغّرة في صفحة الإعدادات */
+.print-preview { zoom: .45; pointer-events: none; }
+.print-preview .lh-sheet { zoom: 1 !important; box-shadow: none; }
+@media print { .print-preview { display: none; } }
+
 /* صفحة A4 بلا هوامش فقط للصفحات التي تحتوي ترويسة */
 @page letterhead { size: A4; margin: 0; }
 body:has(.lh-page) { page: letterhead; }

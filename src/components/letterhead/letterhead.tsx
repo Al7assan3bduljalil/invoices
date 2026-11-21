@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { Globe, MapPin, Phone } from "lucide-react";
 import { BRAND } from "./brand";
+import { DEFAULT_PRINT_SETTINGS, type PrintSettings } from "@/lib/print-settings";
+
+type LetterheadInfo = PrintSettings["letterhead"];
 
 /*
  * ترويسة الشركة المعتمدة (شموع المدينة).
@@ -25,14 +28,22 @@ export function LogoMark({ color = BRAND.colors.green, className, style }: {
   );
 }
 
-/** الشعار مع اسم الشركة */
-export function BrandLogo() {
+/** الشعار مع اسم الشركة (أو الشعار المرفوع إن وجد) */
+export function BrandLogo({ info }: { info: LetterheadInfo }) {
+  if (info.logoUrl) {
+    return (
+      <div className="lh-logo">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={info.logoUrl} alt={info.name} className="lh-logo-img" />
+      </div>
+    );
+  }
   return (
     <div className="lh-logo">
       <LogoMark className="lh-logo-mark" />
       <div className="lh-logo-text">
-        <div className="lh-logo-name">{BRAND.name}</div>
-        <div className="lh-logo-tagline">{BRAND.tagline}</div>
+        <div className="lh-logo-name">{info.name}</div>
+        {info.tagline && <div className="lh-logo-tagline">{info.tagline}</div>}
       </div>
     </div>
   );
@@ -110,12 +121,12 @@ function ContactLine({ icon, children, ltr }: { icon: ReactNode; children: React
 }
 
 /** بيانات التواصل في التذييل */
-export function ContactBlock() {
+export function ContactBlock({ info }: { info: LetterheadInfo }) {
   return (
     <div className="lh-contact">
-      <ContactLine icon={<Phone strokeWidth={2.4} />} ltr>{BRAND.phone}</ContactLine>
-      <ContactLine icon={<MapPin strokeWidth={2.4} />}>{BRAND.address}</ContactLine>
-      <ContactLine icon={<Globe strokeWidth={2.4} />} ltr>{BRAND.website}</ContactLine>
+      {info.phone && <ContactLine icon={<Phone strokeWidth={2.4} />} ltr>{info.phone}</ContactLine>}
+      {info.address && <ContactLine icon={<MapPin strokeWidth={2.4} />}>{info.address}</ContactLine>}
+      {info.website && <ContactLine icon={<Globe strokeWidth={2.4} />} ltr>{info.website}</ContactLine>}
     </div>
   );
 }
@@ -123,21 +134,34 @@ export function ContactBlock() {
 /**
  * ورقة A4 بترويسة الشركة. يوضع المحتوى في children.
  * عند الطباعة تتكرر الترويسة والتذييل والعلامة المائية في كل صفحة.
+ * إذا كانت الترويسة مطفأة تُحجز مساحتها فقط (للطباعة على ورق مطبوع مسبقاً).
  */
-export function LetterheadSheet({ children }: { children: ReactNode }) {
+export function LetterheadSheet({ children, letterhead = DEFAULT_PRINT_SETTINGS.letterhead }: {
+  children: ReactNode;
+  letterhead?: LetterheadInfo;
+}) {
   return (
-    <div className="lh-sheet" dir="rtl">
-      <div className="lh-header lh-fixed" aria-hidden="true">
-        <HeaderPattern />
-        <BrandLogo />
-      </div>
-      <div className="lh-watermark lh-fixed" aria-hidden="true">
-        <LogoMark color={BRAND.colors.pale} />
-      </div>
-      <div className="lh-footer lh-fixed">
-        <FooterPattern />
-        <ContactBlock />
-      </div>
+    <div className={letterhead.enabled ? "lh-sheet" : "lh-sheet lh-plain"} dir="rtl">
+      {letterhead.enabled && (
+        <>
+          <div className="lh-header lh-fixed" aria-hidden="true">
+            <HeaderPattern />
+            <BrandLogo info={letterhead} />
+          </div>
+          {letterhead.showWatermark && (
+            <div className="lh-watermark lh-fixed" aria-hidden="true">
+              {letterhead.logoUrl
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={letterhead.logoUrl} alt="" className="lh-watermark-img" />
+                : <LogoMark color={BRAND.colors.pale} />}
+            </div>
+          )}
+          <div className="lh-footer lh-fixed">
+            <FooterPattern />
+            <ContactBlock info={letterhead} />
+          </div>
+        </>
+      )}
 
       {/* الجدول يحجز مساحة الترويسة والتذييل في كل صفحة مطبوعة */}
       <table className="lh-flow">

@@ -2,21 +2,27 @@ import type { InvoiceDTO } from "@/lib/types";
 import { formatDate, formatMoney } from "@/lib/utils";
 import { DOCUMENT_LABELS, type DocumentKind } from "./brand";
 import { LetterheadSheet } from "./letterhead";
+import { SignBlock } from "./sign-block";
+import { DEFAULT_PRINT_SETTINGS, signFor, type PrintSettings, type SignAssets } from "@/lib/print-settings";
 
 interface Props {
   kind: DocumentKind;
   invoice: InvoiceDTO;
-  stampUrl?: string | null;
-  signatureUrl?: string | null;
+  settings?: PrintSettings;
+  assets?: SignAssets;
 }
 
 /** قالب الفاتورة / عرض السعر على ترويسة الشركة */
-export function LetterheadDocument({ kind, invoice: inv, stampUrl, signatureUrl }: Props) {
-  const L = DOCUMENT_LABELS[kind];
+export function LetterheadDocument({
+  kind, invoice: inv, settings = DEFAULT_PRINT_SETTINGS, assets = { stampUrl: null, signatureUrl: null },
+}: Props) {
+  const T = settings.templates;
+  const L = { ...DOCUMENT_LABELS[kind], title: (kind === "quote" ? T.quoteTitle : T.invoiceTitle) || DOCUMENT_LABELS[kind].title };
+  const terms = kind === "quote" ? T.quoteTerms : T.invoiceTerms;
   const money = (n: number) => formatMoney(n, inv.currency);
 
   return (
-    <LetterheadSheet>
+    <LetterheadSheet letterhead={settings.letterhead}>
       <div className="lh-doc-head">
         <div>
           <h1 className="lh-doc-title">{L.title}</h1>
@@ -40,11 +46,7 @@ export function LetterheadDocument({ kind, invoice: inv, stampUrl, signatureUrl 
         </div>
       </section>
 
-      {kind === "quote" && (
-        <p className="lh-intro">
-          تحية طيبة وبعد، يسرّنا أن نتقدم لكم بعرض السعر التالي:
-        </p>
-      )}
+      {kind === "quote" && T.quoteIntro && <p className="lh-intro lh-pre">{T.quoteIntro}</p>}
 
       <table className="lh-items">
         <thead>
@@ -73,13 +75,19 @@ export function LetterheadDocument({ kind, invoice: inv, stampUrl, signatureUrl 
 
       <div className="lh-bottom">
         <div className="lh-notes">
-          {kind === "quote" && (
-            <p><strong>صلاحية العرض:</strong> هذا العرض ساري حتى {formatDate(inv.dueDate)}.</p>
+          {kind === "quote" && T.quoteValidity && (
+            <p><strong>صلاحية العرض:</strong> {T.quoteValidity.replaceAll("{date}", formatDate(inv.dueDate))}</p>
           )}
           {inv.notes && (
             <>
               <p className="lh-notes-label">ملاحظات</p>
               <p className="lh-pre">{inv.notes}</p>
+            </>
+          )}
+          {terms && (
+            <>
+              <p className="lh-notes-label">الشروط والأحكام</p>
+              <p className="lh-pre">{terms}</p>
             </>
           )}
         </div>
@@ -93,20 +101,7 @@ export function LetterheadDocument({ kind, invoice: inv, stampUrl, signatureUrl 
         </table>
       </div>
 
-      <div className="lh-sign">
-        <div>
-          <div className="lh-sign-box">
-            {signatureUrl && <img src={signatureUrl} alt="التوقيع" />}
-          </div>
-          <div className="lh-sign-label">التوقيع المعتمد</div>
-        </div>
-        <div>
-          <div className="lh-sign-box">
-            {stampUrl && <img src={stampUrl} alt="الختم" className="lh-stamp" />}
-          </div>
-          <div className="lh-sign-label">ختم الشركة</div>
-        </div>
-      </div>
+      <SignBlock sign={settings.sign} assets={signFor(kind, settings, assets)} />
     </LetterheadSheet>
   );
 }
