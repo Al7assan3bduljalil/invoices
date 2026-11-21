@@ -87,6 +87,46 @@ async function transcribeVoice(msg: TgMessage): Promise<string> {
   return text.trim();
 }
 
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const escHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** أكبر نسخة من الصورة المرسلة (صورة عادية أو ملف صورة) */
+function pickImage(msg: TgMessage): { fileId: string; mime: string; size: number } | null {
+  if (msg.photo?.length) {
+    const p = msg.photo[msg.photo.length - 1];
+    return { fileId: p.file_id, mime: "image/jpeg", size: p.file_size ?? 0 };
+  }
+  const d = msg.document;
+  if (d?.mime_type?.startsWith("image/"))
+    return { fileId: d.file_id, mime: d.mime_type, size: d.file_size ?? 0 };
+  return null;
+}
+
+/** قراءة الصورة (OCR + فهم) بواسطة Gemini وإرجاع النص الظاهر فيها منظماً */
+async function readImage(img: { fileId: string; mime: string }): Promise<string> {
+  const bytes = await downloadFile(img.fileId);
+  const { text } = await generateText({
+    model: getModel(),
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              "استخرج كل النص الظاهر في هذه الصورة حرفياً وبترتيبه، بالعربية أو الإنجليزية. " +
+              "إن كانت فاتورة أو عرض سعر أو قائمة أصناف فاكتب كل بند في سطر مستقل بالشكل: الصنف | الكمية | الوحدة | السعر (ما يظهر فقط) " +
+              "واذكر اسم الجهة/العميل والتاريخ والإجمالي إن ظهرت. اكتب الأرقام كما تظهر ولا تخمّن أرقاماً غير واضحة (اكتب [غير واضح]). " +
+              "إن لم يكن في الصورة نص فصف محتواها بجملة قصيرة. أعد النتيجة فقط بدون شرح.",
+          },
+          { type: "file", data: bytes, mediaType: img.mime },
+        ],
+      },
+    ],
+  });
+  return text.trim();
+}
+
 const HELP = `أهلاً 👋 أنا مساعد الفوترة.
 اكتب لي طلبك بالعربي، مثلاً:
 • جهّز عرض سعر لشركة النور: 10 كابل شبكة و 2 راوتر
@@ -94,6 +134,7 @@ const HELP = `أهلاً 👋 أنا مساعد الفوترة.
 • كم مبيعات هذا الشهر؟
 
 🎙 يمكنك أيضاً إرسال رسالة صوتية وسأفهمها وأنفذها كأنك كتبتها.
+📷 أو أرسل صورة (قائمة أصناف، فاتورة، عرض سعر) وسأقرأها، ويمكنك كتابة تعليق يوضح ما تريده منها.
 
 الأوامر:
 /new بدء محادثة جديدة (مسح السياق)
@@ -162,6 +203,34 @@ async function processUpdate(update: TgUpdate, baseUrl: string) {
     );
     return;
   }
+  const image = pickImage(msg);
+  if (image) {
+    if (image.size > MAX_IMAGE_BYTES) {
+      await sendMessage(msg.chat.id, "الصورة كبيرة جداً. أرسل صورة أصغر من 10 ميغابايت من فضلك.", msg.message_id);
+      return;
+    }
+    await sendChatAction(msg.chat.id);
+    let extracted = "";
+    try {
+      extracted = aiEnabled() ? await readImage(image) : "";
+    } catch (err) {
+      console.error("Telegram image reading failed", err);
+    }
+    if (!extracted) {
+      await sendMessage(msg.chat.id, "لم أستطع قراءة الصورة، أعد إرسالها بشكل أوضح أو اكتب طلبك.", msg.message_id);
+      return;
+    }
+    // نعرض ما قُرئ ليتأكد المستخدم، ثم ننفذه بنفس الصلاحيات والتأكيدات
+    const shown = extracted.length > 1500 ? `${extracted.slice(0, 1500)}…` : extracted;
+    await sendMessage(msg.chat.id, `📷 قرأتُ في الصورة:\n<pre>${escHtml(shown)}</pre>`, msg.message_id);
+    const instruction = text
+      ? `${text}\n\n[نص مستخرج من صورة أرسلتها]\n${extracted}`
+      : `[نص مستخرج من صورة أرسلتها بدون تعليق]\n${extracted}\n\n` +
+        "حلّل محتوى الصورة: إن كان طلب عرض سعر أو قائمة أصناف أو أصناف جديدة فنفّذه وفق القواعد (واسأل عن العميل أو الناقص فقط)، " +
+        "وإلا فلخّصه باختصار واسألني ماذا أفعل به. لا تضف أصنافاً أو أسعاراً غير ظاهرة في الصورة.";
+    await runAgent(msg, instruction, baseUrl);
+    return;
+  }
   const voice = msg.voice ?? msg.audio;
   if (!text && voice) {
     if ((voice.duration ?? 0) > MAX_VOICE_SECONDS || (voice.file_size ?? 0) > MAX_VOICE_BYTES) {
@@ -180,12 +249,12 @@ async function processUpdate(update: TgUpdate, baseUrl: string) {
       return;
     }
     // نعرض ما فُهم ليتأكد المستخدم، ثم ننفذه كأنه نص مكتوب (نفس الصلاحيات والتأكيدات)
-    await sendMessage(msg.chat.id, `🎙 سمعتك تقول:\n<i>${heard.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</i>`, msg.message_id);
+    await sendMessage(msg.chat.id, `🎙 سمعتك تقول:\n<i>${escHtml(heard)}</i>`, msg.message_id);
     await runAgent(msg, heard, baseUrl);
     return;
   }
   if (!text) {
-    await sendMessage(msg.chat.id, "أرسل طلبك كنص أو رسالة صوتية من فضلك.", msg.message_id);
+    await sendMessage(msg.chat.id, "أرسل طلبك كنص أو رسالة صوتية أو صورة من فضلك.", msg.message_id);
     return;
   }
   if (/^\/(start|help)\b/.test(text)) {

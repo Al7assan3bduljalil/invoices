@@ -11,7 +11,10 @@ export type TgMessage = {
   caption?: string;
   voice?: TgVoice;
   audio?: TgVoice;
+  photo?: TgPhotoSize[];
+  document?: { file_id: string; mime_type?: string; file_size?: number; file_name?: string };
 };
+export type TgPhotoSize = { file_id: string; width: number; height: number; file_size?: number };
 export type TgVoice = { file_id: string; duration?: number; mime_type?: string; file_size?: number };
 export type TgUpdate = { update_id: number; message?: TgMessage; edited_message?: TgMessage };
 
