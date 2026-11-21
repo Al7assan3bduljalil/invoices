@@ -10,10 +10,16 @@ interface Props {
   signatureUrl?: string | null;
 }
 
+const CURRENCY_IN: Record<string, string> = {
+  LYD: "بالدينار الليبي", USD: "بالدولار", EUR: "باليورو", SAR: "بالريال السعودي",
+  AED: "بالدرهم الإماراتي", EGP: "بالجنيه المصري", KWD: "بالدينار الكويتي",
+};
+
 /** قالب الفاتورة / عرض السعر على ترويسة الشركة */
 export function LetterheadDocument({ kind, invoice: inv, stampUrl, signatureUrl }: Props) {
   const L = DOCUMENT_LABELS[kind];
   const money = (n: number) => formatMoney(n, inv.currency);
+  const rate = inv.showExchangeRate && inv.exchangeRate ? inv.exchangeRate : null;
 
   return (
     <LetterheadSheet>
@@ -89,6 +95,18 @@ export function LetterheadDocument({ kind, invoice: inv, stampUrl, signatureUrl 
             {inv.discount > 0 && <tr><th>الخصم</th><td>- {money(inv.discount)}</td></tr>}
             {inv.taxRate > 0 && <tr><th>الضريبة ({inv.taxRate}%)</th><td>{money(inv.taxAmount)}</td></tr>}
             <tr className="lh-grand"><th>الإجمالي</th><td>{money(inv.total)}</td></tr>
+            {rate && (
+              <>
+                <tr className="lh-fx">
+                  <th>سعر الصرف</th>
+                  <td><bdi dir="ltr">1 {inv.currency} = {rate.toLocaleString("en", { maximumFractionDigits: 4 })} {inv.exchangeCurrency}</bdi></td>
+                </tr>
+                <tr className="lh-fx">
+                  <th>الإجمالي {CURRENCY_IN[inv.exchangeCurrency] ?? `بـ${inv.exchangeCurrency}`}</th>
+                  <td>{formatMoney(Math.round(inv.total * rate * 100) / 100, inv.exchangeCurrency)}</td>
+                </tr>
+              </>
+            )}
           </tbody>
         </table>
       </div>

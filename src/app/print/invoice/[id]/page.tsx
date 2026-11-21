@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/server/current-user";
 import { getInvoice } from "@/server/invoices";
 import { LetterheadDocument } from "@/components/letterhead/document-template";
 import { PrintToolbar } from "@/components/letterhead/print-toolbar";
+import { ExchangeRateControl } from "@/components/letterhead/exchange-rate-control";
 import { DOCUMENT_LABELS, parseDocumentKind } from "@/components/letterhead/brand";
 
 type Params = { params: Promise<{ id: string }>; searchParams: Promise<{ type?: string }> };
@@ -32,7 +33,9 @@ export default async function PrintInvoicePage({ params, searchParams }: Params)
           active: k === kind,
         }))}
         hint="اختر الورق A4 وفعّل «رسومات الخلفية» في نافذة الطباعة"
-      />
+      >
+        <ExchangeRateControl invoice={invoice} />
+      </PrintToolbar>
       <LetterheadDocument
         kind={kind}
         invoice={invoice}

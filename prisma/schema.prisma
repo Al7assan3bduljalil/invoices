@@ -92,6 +92,12 @@ model Invoice {
   issueDate      DateTime      @default(now())
   dueDate        DateTime
   currency       String        @default("USD")
+  /// سعر الصرف: كم يساوي 1 من عملة الفاتورة بعملة الصرف (مثلاً 1 USD = 4.85 LYD)
+  exchangeRate     Decimal?    @db.Decimal(14, 4)
+  /// العملة المحوَّل إليها عند عرض سعر الصرف
+  exchangeCurrency String      @default("LYD")
+  /// إظهار سعر الصرف في الفاتورة المطبوعة
+  showExchangeRate Boolean     @default(true)
   /// نسبة الضريبة المئوية المطبقة على المجموع بعد الخصم
   taxRate        Decimal       @default(0) @db.Decimal(5, 2)
   /// قيمة الخصم الثابتة

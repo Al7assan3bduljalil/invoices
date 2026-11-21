@@ -118,6 +118,7 @@ export async function createInvoice(
         issueDate: input.issueDate,
         dueDate: input.dueDate,
         currency: input.currency,
+        ...exchangeFields(input),
         taxRate: input.taxRate,
         discount: totals.discount,
         subtotal: totals.subtotal,
@@ -153,6 +154,7 @@ export async function updateInvoice(userId: string, id: string, input: InvoiceIn
         issueDate: input.issueDate,
         dueDate: input.dueDate,
         currency: input.currency,
+        ...exchangeFields(input),
         taxRate: input.taxRate,
         discount: totals.discount,
         subtotal: totals.subtotal,
@@ -164,6 +166,34 @@ export async function updateInvoice(userId: string, id: string, input: InvoiceIn
       },
       include: invoiceInclude,
     });
+  });
+  return serializeInvoice(inv);
+}
+
+/** حقول سعر الصرف من نموذج الفاتورة — لا تُلمس إن لم تُرسل (حتى لا يمسحها نموذج قديم) */
+function exchangeFields(input: InvoiceInput) {
+  return {
+    ...(input.exchangeRate !== undefined && { exchangeRate: input.exchangeRate }),
+    ...(input.exchangeCurrency && { exchangeCurrency: input.exchangeCurrency.toUpperCase() }),
+  };
+}
+
+/** تحديث سعر الصرف وإظهاره/إخفاؤه في الطباعة */
+export async function setExchangeRate(
+  userId: string,
+  id: string,
+  data: { exchangeRate?: number | null; exchangeCurrency?: string; showExchangeRate?: boolean },
+) {
+  const existing = await prisma.invoice.findFirst({ where: { id, userId } });
+  if (!existing) throw new HttpError(404, "الفاتورة غير موجودة");
+  const inv = await prisma.invoice.update({
+    where: { id },
+    data: {
+      ...(data.exchangeRate !== undefined && { exchangeRate: data.exchangeRate }),
+      ...(data.exchangeCurrency && { exchangeCurrency: data.exchangeCurrency.toUpperCase() }),
+      ...(data.showExchangeRate !== undefined && { showExchangeRate: data.showExchangeRate }),
+    },
+    include: invoiceInclude,
   });
   return serializeInvoice(inv);
 }

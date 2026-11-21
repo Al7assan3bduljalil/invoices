@@ -178,6 +178,8 @@ body {
 .lh-totals .lh-grand th, .lh-totals .lh-grand td { background: var(--lh-dark); color: #fff; font-weight: 700; font-size: 11.5pt; padding: 2mm 3mm; }
 .lh-totals .lh-grand th { border-start-start-radius: 1.5mm; border-end-start-radius: 1.5mm; }
 .lh-totals .lh-grand td { border-start-end-radius: 1.5mm; border-end-end-radius: 1.5mm; }
+.lh-totals .lh-fx th, .lh-totals .lh-fx td { font-size: 9.5pt; color: #374151; }
+.lh-totals .lh-grand + .lh-fx th, .lh-totals .lh-grand + .lh-fx td { padding-top: 2.5mm; }
 
 .lh-sign { display: flex; justify-content: space-between; margin-top: 10mm; padding: 0 6mm; break-inside: avoid; }
 .lh-sign > div { text-align: center; width: 50mm; }

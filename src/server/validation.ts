@@ -40,6 +40,8 @@ export const invoiceSchema = z.object({
   issueDate: z.coerce.date(),
   dueDate: z.coerce.date(),
   currency: z.string().trim().length(3).default("USD"),
+  exchangeRate: z.coerce.number().positive().optional().nullable(),
+  exchangeCurrency: z.string().trim().length(3).optional(),
   taxRate: z.coerce.number().min(0).max(100).default(0),
   discount: z.coerce.number().min(0).default(0),
   notes: optionalText,
@@ -47,3 +49,10 @@ export const invoiceSchema = z.object({
 });
 
 export type InvoiceInput = z.infer<typeof invoiceSchema>;
+
+/** إعدادات سعر الصرف في الطباعة — كل الحقول اختيارية */
+export const exchangeRateSchema = z.object({
+  exchangeRate: z.coerce.number().positive("سعر الصرف يجب أن يكون أكبر من صفر").nullable().optional(),
+  exchangeCurrency: z.string().trim().length(3).optional(),
+  showExchangeRate: z.boolean().optional(),
+});
