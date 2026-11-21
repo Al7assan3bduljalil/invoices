@@ -247,7 +247,8 @@ function SampleLetter({ s, assets }: { s: PrintSettings; assets: SignAssets }) {
 const SAMPLE_INVOICE: InvoiceDTO = {
   id: "sample", number: "INV-2026-0001", status: "SENT",
   issueDate: "2026-11-21T00:00:00.000Z", dueDate: "2026-12-05T00:00:00.000Z",
-  currency: "LYD", taxRate: 0, discount: 0, subtotal: 4350, taxAmount: 0, total: 4350,
+  currency: "LYD", exchangeRate: null, exchangeCurrency: "USD", showExchangeRate: false,
+  taxRate: 0, discount: 0, subtotal: 4350, taxAmount: 0, total: 4350,
   notes: null, paidAt: null, archivedAt: null, shareToken: "sample", createdByAI: false,
   client: { id: "c", name: "شركة النموذج للتجارة", email: null, phone: "+218-91-0000000", address: "طرابلس", taxNumber: null, notes: null } as InvoiceDTO["client"],
   items: [
