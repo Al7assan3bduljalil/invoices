@@ -39,6 +39,9 @@ export type InvoiceDTO = {
   issueDate: string;
   dueDate: string;
   currency: string;
+  exchangeRate: number | null;
+  exchangeCurrency: string;
+  showExchangeRate: boolean;
   taxRate: number;
   discount: number;
   subtotal: number;

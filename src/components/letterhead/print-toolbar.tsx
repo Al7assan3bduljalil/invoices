@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -9,9 +10,11 @@ interface Props {
   hint?: string;
   /** إظهار رابط تعديل الترويسة والقوالب والختم */
   settingsHref?: boolean;
+  /** أدوات إضافية تظهر في الشريط (مثل زر سعر الصرف) */
+  children?: ReactNode;
 }
 
-export function PrintToolbar({ backHref, switches, hint, settingsHref }: Props) {
+export function PrintToolbar({ backHref, switches, hint, settingsHref, children }: Props) {
   return (
     <div className="lh-toolbar">
       <div className="lh-toolbar-inner">
@@ -25,6 +28,7 @@ export function PrintToolbar({ backHref, switches, hint, settingsHref }: Props) 
             <Link href={s.href} replace>{s.label}</Link>
           </Button>
         ))}
+        {children}
         <div className="flex-1 text-xs text-muted-foreground">{hint}</div>
         {settingsHref && (
           <Button variant="outline" size="sm" asChild>
