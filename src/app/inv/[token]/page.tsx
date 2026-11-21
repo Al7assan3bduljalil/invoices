@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { serializeInvoice } from "@/server/serialize";
 import { invoiceInclude } from "@/server/invoices";
 import { PublicInvoiceView } from "@/components/invoice/public-invoice-view";
+import { parseDocumentKind } from "@/components/letterhead/brand";
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -13,8 +14,12 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   return { title: `فاتورة ${inv.number}` };
 }
 
-export default async function SharePage({ params }: { params: Promise<{ token: string }> }) {
+export default async function SharePage({ params, searchParams }: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ type?: string }>;
+}) {
   const { token } = await params;
+  const kind = parseDocumentKind((await searchParams).type);
   const inv = await prisma.invoice.findUnique({
     where: { shareToken: token },
     include: { ...invoiceInclude, user: true },
@@ -24,6 +29,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
   return (
     <PublicInvoiceView
       invoice={serializeInvoice(inv)}
+      kind={kind}
       stampUrl={user?.stampUrl ?? null}
       signatureUrl={user?.signatureUrl ?? null}
     />
