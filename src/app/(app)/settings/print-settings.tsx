@@ -130,10 +130,15 @@ export function PrintSettingsSection() {
                   onChange={(url) => uploadAsset("stampUrl", url)} removeWhiteDefault />
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-                <Toggle checked={s.sign.showSignature} onChange={(v) => sg("showSignature", v)} label="إظهار التوقيع" />
-                <Toggle checked={s.sign.showStamp} onChange={(v) => sg("showStamp", v)} label="إظهار الختم" />
-              </div>
+              <Toggle
+                checked={s.sign.showSignature && s.sign.showStamp}
+                onChange={(v) => setS((p) => {
+                  setDirty(true);
+                  return p ? { ...p, sign: { ...p.sign, showSignature: v, showStamp: v } } : p;
+                })}
+                label="إظهار خانة التوقيع والختم"
+                hint="الختم والتوقيع يظهران معاً في خانة واحدة، والختم فوق التوقيع"
+              />
 
               <div className="space-y-1.5">
                 <Label>يظهر في</Label>
@@ -152,20 +157,13 @@ export function PrintSettingsSection() {
                     <option value="end">يسار</option>
                   </Select>
                 </Field>
-                <Field label="طريقة العرض">
-                  <Select value={s.sign.overlap ? "overlap" : "split"} onChange={(e) => sg("overlap", e.target.value === "overlap")}>
-                    <option value="split">التوقيع والختم جنباً إلى جنب</option>
-                    <option value="overlap">الختم فوق التوقيع</option>
-                  </Select>
-                </Field>
                 <Range label="حجم التوقيع" unit="مم" min={10} max={45} value={s.sign.signatureSize} onChange={(v) => sg("signatureSize", v)} />
                 <Range label="حجم الختم" unit="مم" min={15} max={55} value={s.sign.stampSize} onChange={(v) => sg("stampSize", v)} />
                 <Range label="إمالة الختم" unit="°" min={-30} max={30} value={s.sign.stampRotation} onChange={(v) => sg("stampRotation", v)} />
                 <Field label="اسم الموقّع (اختياري)">
                   <Input value={s.sign.signatoryName} placeholder="مثال: م. أحمد علي" onChange={(e) => sg("signatoryName", e.target.value)} />
                 </Field>
-                <Field label="عنوان خانة التوقيع"><Input value={s.sign.signatureLabel} onChange={(e) => sg("signatureLabel", e.target.value)} /></Field>
-                <Field label="عنوان خانة الختم"><Input value={s.sign.stampLabel} onChange={(e) => sg("stampLabel", e.target.value)} /></Field>
+                <Field label="عنوان الخانة"><Input value={s.sign.signatureLabel} placeholder="التوقيع والختم" onChange={(e) => sg("signatureLabel", e.target.value)} /></Field>
               </div>
             </CardContent>
           </Card>

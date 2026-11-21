@@ -11,9 +11,15 @@ interface Props {
   editable?: boolean;
 }
 
+/** عنوان الخانة الموحدة (القيمة القديمة «التوقيع المعتمد» تُعرض كـ«التوقيع والختم») */
+export function signLabel(sign: PrintSettings["sign"]) {
+  const l = sign.signatureLabel.trim();
+  return !l || l === "التوقيع المعتمد" ? "التوقيع والختم" : l;
+}
+
 /**
- * كتلة التوقيع والختم في أسفل المستند.
- * الحجم والموضع والتداخل تأتي من إعدادات الطباعة.
+ * خانة واحدة للتوقيع والختم في أسفل المستند: الختم فوق التوقيع.
+ * الحجم والموضع والإمالة تأتي من إعدادات الطباعة.
  */
 export function SignBlock({ sign, assets, signatory, editable }: Props) {
   const edit = editable ? { contentEditable: true, suppressContentEditableWarning: true, spellCheck: false } as const : {};
@@ -25,43 +31,24 @@ export function SignBlock({ sign, assets, signatory, editable }: Props) {
     height: `${sign.stampSize}mm`,
     transform: sign.stampRotation ? `rotate(${sign.stampRotation}deg)` : undefined,
   };
-  const boxHeight = `${Math.max(sign.signatureSize, sign.stampSize * (sign.overlap ? 0.8 : 1)) + 2}mm`;
-
-  if (sign.overlap) {
-    // الختم فوق التوقيع في كتلة واحدة
-    return (
-      <div className={`lh-signblock lh-pos-${sign.position}`}>
-        <div className="lh-signcell">
-          {name && <div className="lh-signatory" {...edit}>{name}</div>}
-          <div className="lh-signstack" style={{ height: boxHeight }}>
-            {signatureUrl && <img src={signatureUrl} alt="التوقيع" className="lh-sig-img" style={sigStyle} />}
-            {stampUrl && <img src={stampUrl} alt="الختم" className="lh-stamp-img lh-stamp-over" style={stampStyle} />}
-          </div>
-          <div className="lh-sign-label">
-            {sign.signatureLabel && sign.stampLabel
-              ? `${sign.signatureLabel} و${sign.stampLabel}`
-              : sign.signatureLabel || sign.stampLabel || "التوقيع والختم"}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const boxHeight = `${Math.max(sign.signatureSize, sign.stampSize * 0.85) + 2}mm`;
 
   return (
-    <div className={`lh-signblock lh-pos-${sign.position} lh-split`}>
+    <div className={`lh-signblock lh-pos-${sign.position}`}>
       <div className="lh-signcell">
         {name && <div className="lh-signatory" {...edit}>{name}</div>}
-        <div className="lh-signbox" style={{ height: boxHeight }}>
+        <div className="lh-signstack" style={{ height: boxHeight }}>
           {signatureUrl && <img src={signatureUrl} alt="التوقيع" className="lh-sig-img" style={sigStyle} />}
+          {stampUrl && (
+            <img
+              src={stampUrl}
+              alt="الختم"
+              className={signatureUrl ? "lh-stamp-img lh-stamp-over" : "lh-stamp-img"}
+              style={stampStyle}
+            />
+          )}
         </div>
-        <div className="lh-sign-label">{sign.signatureLabel || "التوقيع"}</div>
-      </div>
-      <div className="lh-signcell">
-        {name && <div className="lh-signatory lh-signatory-ghost" aria-hidden="true">{name}</div>}
-        <div className="lh-signbox" style={{ height: boxHeight }}>
-          {stampUrl && <img src={stampUrl} alt="الختم" className="lh-stamp-img" style={stampStyle} />}
-        </div>
-        <div className="lh-sign-label">{sign.stampLabel || "الختم"}</div>
+        <div className="lh-sign-label">{signLabel(sign)}</div>
       </div>
     </div>
   );

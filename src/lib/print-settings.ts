@@ -43,13 +43,15 @@ export const printSettingsSchema = z.object({
     signatureSize: z.number().min(10).max(45),
     /** قطر الختم بالمليمتر */
     stampSize: z.number().min(15).max(55),
-    /** الختم فوق التوقيع (متداخل) بدلاً من جنباً إلى جنب */
+    /** غير مستخدم: الختم والتوقيع دائماً في خانة واحدة (يبقى للتوافق مع القيم المحفوظة) */
     overlap: z.boolean(),
     /** موضع كتلة التوقيع في الصفحة */
     position: z.enum(signPositions),
     /** إمالة الختم بالدرجات */
     stampRotation: z.number().min(-30).max(30),
+    /** عنوان خانة التوقيع والختم */
     signatureLabel: text(60),
+    /** غير مستخدم (كان عنوان خانة الختم المنفصلة) */
     stampLabel: text(60),
     signatoryName: text(80),
   }),
@@ -91,7 +93,7 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
     overlap: false,
     position: "end",
     stampRotation: 0,
-    signatureLabel: "التوقيع المعتمد",
+    signatureLabel: "التوقيع والختم",
     stampLabel: "ختم الشركة",
     signatoryName: "",
   },
@@ -133,9 +135,11 @@ export type SignDocument = "invoice" | "quote" | "letter";
 
 export function signFor(doc: SignDocument, s: PrintSettings, assets: SignAssets): SignAssets {
   const on = doc === "invoice" ? s.sign.onInvoice : doc === "quote" ? s.sign.onQuote : s.sign.onLetter;
+  // الختم والتوقيع خانة واحدة: يظهران معاً أو يختفيان معاً
+  const show = on && s.sign.showSignature && s.sign.showStamp;
   return {
-    signatureUrl: on && s.sign.showSignature ? assets.signatureUrl : null,
-    stampUrl: on && s.sign.showStamp ? assets.stampUrl : null,
+    signatureUrl: show ? assets.signatureUrl : null,
+    stampUrl: show ? assets.stampUrl : null,
   };
 }
 
