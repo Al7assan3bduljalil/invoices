@@ -6,6 +6,7 @@ import { serializeInvoice } from "@/server/serialize";
 import { invoiceInclude } from "@/server/invoices";
 import { PublicInvoiceView } from "@/components/invoice/public-invoice-view";
 import { parseDocumentKind } from "@/components/letterhead/brand";
+import { printContext } from "@/lib/print-settings";
 
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -25,13 +26,13 @@ export default async function SharePage({ params, searchParams }: {
     include: { ...invoiceInclude, user: true },
   });
   if (!inv || inv.status === "DRAFT") notFound();
-  const user = await prisma.user.findUnique({ where: { id: inv.userId } });
+  const { settings, assets } = printContext(inv.user);
   return (
     <PublicInvoiceView
       invoice={serializeInvoice(inv)}
       kind={kind}
-      stampUrl={user?.stampUrl ?? null}
-      signatureUrl={user?.signatureUrl ?? null}
+      settings={settings}
+      assets={assets}
     />
   );
 }

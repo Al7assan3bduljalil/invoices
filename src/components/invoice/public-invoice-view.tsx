@@ -4,16 +4,17 @@ import type { InvoiceDTO } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { LetterheadDocument } from "@/components/letterhead/document-template";
 import type { DocumentKind } from "@/components/letterhead/brand";
+import type { PrintSettings, SignAssets } from "@/lib/print-settings";
 
 interface Props {
   invoice: InvoiceDTO;
   kind?: DocumentKind;
-  stampUrl?: string | null;
-  signatureUrl?: string | null;
+  settings?: PrintSettings;
+  assets?: SignAssets;
 }
 
 /** صفحة الزبون العامة — تعرض المستند على ترويسة الشركة وجاهزة للطباعة */
-export function PublicInvoiceView({ invoice: inv, kind = "invoice", stampUrl, signatureUrl }: Props) {
+export function PublicInvoiceView({ invoice: inv, kind = "invoice", settings, assets }: Props) {
   const [copying, setCopying] = useState(false);
 
   async function copyLink() {
@@ -37,7 +38,7 @@ export function PublicInvoiceView({ invoice: inv, kind = "invoice", stampUrl, si
           </Button>
         </div>
       </div>
-      <LetterheadDocument kind={kind} invoice={inv} stampUrl={stampUrl} signatureUrl={signatureUrl} />
+      <LetterheadDocument kind={kind} invoice={inv} settings={settings} assets={assets} />
     </div>
   );
 }
