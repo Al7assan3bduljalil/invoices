@@ -93,7 +93,7 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
     overlap: false,
     position: "end",
     stampRotation: 0,
-    signatureLabel: "التوقيع والختم",
+    signatureLabel: "التوقيع المعتمد وختم الشركة",
     stampLabel: "ختم الشركة",
     signatoryName: "",
   },

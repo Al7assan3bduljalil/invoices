@@ -163,7 +163,7 @@ export function PrintSettingsSection() {
                 <Field label="اسم الموقّع (اختياري)">
                   <Input value={s.sign.signatoryName} placeholder="مثال: م. أحمد علي" onChange={(e) => sg("signatoryName", e.target.value)} />
                 </Field>
-                <Field label="عنوان الخانة"><Input value={s.sign.signatureLabel} placeholder="التوقيع والختم" onChange={(e) => sg("signatureLabel", e.target.value)} /></Field>
+                <Field label="عنوان الخانة"><Input value={s.sign.signatureLabel} placeholder="التوقيع المعتمد وختم الشركة" onChange={(e) => sg("signatureLabel", e.target.value)} /></Field>
               </div>
             </CardContent>
           </Card>
