@@ -39,6 +39,7 @@ model User {
   clients  Client[]
   products Product[]
   invoices Invoice[]
+  letters  Letter[]
 }
 
 /// العميل
@@ -56,6 +57,7 @@ model Client {
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   invoices Invoice[]
+  letters  Letter[]
 
   @@index([userId])
   @@index([userId, name])
@@ -133,4 +135,51 @@ model InvoiceItem {
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([invoiceId])
+}
+
+enum LetterDirection {
+  OUTGOING // صادر
+  INCOMING // وارد
+}
+
+enum LetterStatus {
+  DRAFT    // مسودة
+  SENT     // مُرسل / مُستلم
+  CLOSED   // مُغلق (تمت المتابعة)
+}
+
+/// مراسلة رسمية (خطاب صادر أو وارد)
+model Letter {
+  id             String          @id @default(cuid())
+  userId         String
+  /// العميل المرتبط (اختياري)
+  clientId       String?
+  /// الرقم الإشاري، مثال: ص/2026/0001 للصادر و و/2026/0001 للوارد
+  number         String
+  direction      LetterDirection @default(OUTGOING)
+  status         LetterStatus    @default(DRAFT)
+  date           DateTime        @default(now())
+  subject        String
+  /// اسم الجهة: المرسَل إليها في الصادر أو المرسِلة في الوارد
+  party          String
+  /// لقب المخاطَب، مثل "المحترمين"
+  partyTitle     String?
+  /// الرقم الإشاري لدى الجهة الأخرى (للوارد غالباً)
+  externalRef    String?
+  body           String          @db.Text
+  /// صفة الموقّع في الخطاب الصادر
+  signatory      String?
+  /// نسخة إلى
+  cc             String?
+  notes          String?
+  createdByAI    Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, number])
+  @@index([userId, direction, date])
+  @@index([clientId])
 }

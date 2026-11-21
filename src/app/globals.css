@@ -197,6 +197,11 @@ body {
 .lh-letter-body { min-height: 80mm; white-space: pre-wrap; margin-bottom: 6mm; text-align: justify; }
 .lh-letter-sign { width: 60mm; margin-inline-start: auto; text-align: center; margin-top: 10mm; font-weight: 700; }
 .lh-letter-sign .lh-sign-label { margin-top: 22mm; font-weight: 400; }
+.lh-letter-body-saved { min-height: 25mm; }
+.lh-letter-sign-box { height: 22mm; display: flex; align-items: center; justify-content: center; gap: 2mm; }
+.lh-letter-sign-box img { max-height: 22mm; max-width: 30mm; object-fit: contain; }
+.lh-letter-sign-box + .lh-sign-label { margin-top: 0; }
+.lh-letter-cc { margin-top: 8mm; font-size: 10pt; color: #374151; }
 
 /* صفحة A4 بلا هوامش فقط للصفحات التي تحتوي ترويسة */
 @page letterhead { size: A4; margin: 0; }

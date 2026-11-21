@@ -38,5 +38,7 @@ export const DB_SCHEMA_DOC = `
 - "Product"(id, "userId", name, description, unit, price, "taxRate", "isActive")
 - "Invoice"(id, "userId", "clientId", number, status, "issueDate", "dueDate", currency, "taxRate", discount, subtotal, "taxAmount", total, "paidAt", "archivedAt", "createdByAI", "createdAt")
    status ∈ ('DRAFT','SENT','PAID','OVERDUE','CANCELLED'). "archivedAt" IS NOT NULL تعني أن الفاتورة في الأرشيف.
+- "Letter"(id, "userId", "clientId", number, direction, status, date, subject, party, "externalRef", body, "createdAt")
+   direction ∈ ('OUTGOING','INCOMING') أي صادر/وارد، status ∈ ('DRAFT','SENT','CLOSED').
 - "InvoiceItem"(id, "invoiceId", "productId", description, unit, quantity, "unitPrice", "lineTotal")
 `;

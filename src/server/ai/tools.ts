@@ -11,6 +11,7 @@ import {
   setInvoiceStatus,
 } from "../invoices";
 import { serializeClient, serializeProduct } from "../serialize";
+import { createLetter, listLetters } from "../letters";
 import { reminderContext } from "./reminder";
 import { DB_SCHEMA_DOC, runReadOnlySql } from "./sql";
 
@@ -313,6 +314,44 @@ export function buildTools(userId: string) {
           return { error: "الفاتورة غير موجودة" };
         }
       },
+    }),
+
+    createLetter: tool({
+      description:
+        "إنشاء خطاب رسمي صادر (مسودة) في قسم المراسلات ليُطبع على ترويسة الشركة. اكتب المتن بنفسك بالعربية الفصحى بدون التحية الافتتاحية والخاتمة والتوقيع لأنها تضاف تلقائياً.",
+      inputSchema: z.object({
+        party: z.string().describe("اسم الجهة المرسَل إليها، مثل: شركة الأمل للتجارة"),
+        subject: z.string().describe("موضوع الخطاب"),
+        body: z.string().describe("متن الخطاب فقط"),
+        partyTitle: z.string().optional().describe("لقب المخاطَب، الافتراضي: المحترمين"),
+        clientId: z.string().optional().describe("معرّف العميل إن كانت الجهة عميلاً مسجلاً (من searchClients)"),
+        signatory: z.string().optional().describe("صفة الموقّع، الافتراضي: المدير العام"),
+      }),
+      execute: async (input) => {
+        const l = await createLetter(
+          userId,
+          { ...input, direction: "OUTGOING", partyTitle: input.partyTitle ?? "المحترمين", signatory: input.signatory ?? "المدير العام" },
+          { createdByAI: true },
+        );
+        return { id: l.id, number: l.number, subject: l.subject, party: l.party, url: `/letters/${l.id}`, printUrl: `/print/letters/${l.id}` };
+      },
+    }),
+
+    listLetters: tool({
+      description: "البحث في المراسلات (الصادر والوارد) بالموضوع أو الجهة أو الرقم الإشاري.",
+      inputSchema: z.object({
+        query: z.string().optional(),
+        direction: z.enum(["OUTGOING", "INCOMING"]).optional(),
+      }),
+      execute: async ({ query, direction }) =>
+        (await listLetters(userId, { q: query, direction, take: 20 })).map((l) => ({
+          number: l.number,
+          direction: l.direction === "OUTGOING" ? "صادر" : "وارد",
+          date: l.date.slice(0, 10),
+          subject: l.subject,
+          party: l.party,
+          url: `/letters/${l.id}`,
+        })),
     }),
   };
 }
