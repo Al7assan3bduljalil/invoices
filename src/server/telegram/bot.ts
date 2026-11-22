@@ -4,6 +4,7 @@ import { aiEnabled, getModel } from "@/server/ai/model";
 import { systemPrompt } from "@/server/ai/prompt";
 import { buildTools } from "@/server/ai/tools";
 import { downloadFile, sendChatAction, sendMessage, type TgMessage, type TgUpdate } from "./api";
+import { detectKind, extractText, fileExtension, type FileKind } from "./files";
 import { absolutize, markdownToTelegramHtml } from "./format";
 
 /** معرّفات حسابات Telegram المسموح لها باستخدام البوت (TELEGRAM_ALLOWED_USER_IDS=123,456) */
@@ -127,6 +128,117 @@ async function readImage(img: { fileId: string; mime: string }): Promise<string>
   return text.trim();
 }
 
+// ---------- الملفات (Excel، Word، CSV، TXT، PDF...) ----------
+const MAX_FILE_BYTES = 15 * 1024 * 1024; // حد تنزيل البوت من Telegram 20MB
+const MAX_FILE_TEXT_CHARS = 60_000; // ما يُمرَّر للمساعد من نص الملف
+const SUPPORTED_FILES = "Excel (xlsx)، Word (docx)، PowerPoint (pptx)، PDF، CSV، TXT، JSON";
+
+/** قراءة ملف PDF بواسطة Gemini (يفهم PDF مباشرة بما فيه الممسوح ضوئياً) */
+async function readPdf(bytes: Uint8Array): Promise<string> {
+  const { text } = await generateText({
+    model: getModel(),
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              "استخرج كل النص في ملف PDF هذا حرفياً وبترتيبه، بالعربية أو الإنجليزية. " +
+              "اكتب الجداول وقوائم الأصناف بحيث يكون كل صف في سطر مستقل والأعمدة مفصولة بـ | (مثل: الصنف | الكمية | الوحدة | السعر). " +
+              "اكتب الأرقام كما تظهر ولا تخمّن أرقاماً غير واضحة (اكتب [غير واضح]). أعد النتيجة فقط بدون شرح.",
+          },
+          { type: "file", data: bytes, mediaType: "application/pdf" },
+        ],
+      },
+    ],
+  });
+  return text.trim();
+}
+
+function kindLabel(kind: FileKind) {
+  return (
+    { xlsx: "Excel", docx: "Word", pptx: "PowerPoint", pdf: "PDF", csv: "CSV", json: "JSON", text: "نصي" } as Record<
+      string,
+      string
+    >
+  )[kind];
+}
+
+/** استقبال ملف: استخراج محتواه وعرض معاينة ثم تمريره للمساعد مع تعليق المستخدم */
+async function handleDocument(msg: TgMessage, caption: string, baseUrl: string) {
+  const doc = msg.document!;
+  const name = doc.file_name || "ملف";
+  const kind = detectKind(doc.file_name, doc.mime_type);
+  const chatId = msg.chat.id;
+
+  if (kind === "legacy-office") {
+    const ext = fileExtension(doc.file_name);
+    const modern = ext === "doc" ? "docx" : ext === "ppt" ? "pptx" : "xlsx";
+    await sendMessage(
+      chatId,
+      `صيغة <b>.${escHtml(ext || "قديمة")}</b> قديمة ولا أستطيع قراءتها. احفظ الملف بصيغة <b>.${modern}</b> أو PDF وأرسله مرة أخرى.`,
+      msg.message_id,
+    );
+    return;
+  }
+  if (kind === "unsupported") {
+    await sendMessage(
+      chatId,
+      `لا أستطيع قراءة هذا النوع من الملفات (${escHtml(name)}).\nالصيغ المدعومة: ${SUPPORTED_FILES}، والصور.`,
+      msg.message_id,
+    );
+    return;
+  }
+  if ((doc.file_size ?? 0) > MAX_FILE_BYTES) {
+    await sendMessage(chatId, "الملف كبير جداً. أرسل ملفاً أصغر من 15 ميغابايت من فضلك.", msg.message_id);
+    return;
+  }
+  if (kind === "pdf" && !aiEnabled()) {
+    await sendMessage(chatId, "قراءة ملفات PDF تحتاج تفعيل المساعد الذكي على الخادم.", msg.message_id);
+    return;
+  }
+
+  await sendChatAction(chatId);
+  let extracted = "";
+  try {
+    const bytes = await downloadFile(doc.file_id);
+    extracted = kind === "pdf" ? await readPdf(bytes) : extractText(kind, bytes);
+  } catch (err) {
+    console.error(`Telegram file reading failed (${kind}, ${name})`, err);
+    await sendMessage(chatId, `تعذر قراءة الملف «${escHtml(name)}». تأكد أنه غير تالف وغير محمي بكلمة مرور.`, msg.message_id);
+    return;
+  }
+  extracted = extracted.replace(/\u0000/g, "").trim();
+  if (!extracted) {
+    await sendMessage(chatId, `الملف «${escHtml(name)}» فارغ أو لا يحتوي نصاً يمكن قراءته.`, msg.message_id);
+    return;
+  }
+
+  let truncatedNote = "";
+  if (extracted.length > MAX_FILE_TEXT_CHARS) {
+    extracted = extracted.slice(0, MAX_FILE_TEXT_CHARS);
+    truncatedNote = "\n\n[تنبيه: الملف طويل، وهذا أول جزء منه فقط]";
+  }
+  const lines = extracted.split("\n").length;
+  const preview = extracted.length > 1200 ? `${extracted.slice(0, 1200)}…` : extracted;
+  await sendMessage(
+    chatId,
+    `📄 قرأتُ ملف ${kindLabel(kind)} «${escHtml(name)}» (${lines} سطر):\n<pre>${escHtml(preview)}</pre>` +
+      (truncatedNote ? "\n⚠️ الملف طويل، سأعتمد على أول جزء منه فقط." : ""),
+    msg.message_id,
+  );
+
+  const header = `[محتوى ملف ${kindLabel(kind)} أرسلته: ${name}]`;
+  const instruction = caption
+    ? `${caption}\n\n${header}\n${extracted}${truncatedNote}`
+    : `${header} (بدون تعليق)\n${extracted}${truncatedNote}\n\n` +
+      "حلّل محتوى الملف: إن كان طلب عرض سعر أو قائمة أصناف أو قائمة أسعار أو أصناف جديدة فلخّص ما فهمته باختصار " +
+      "واسألني ماذا أريد (مثلاً: تجهيز عرض لجهة معينة، أو إضافة/تحديث الأصناف في الكتالوج) واسأل عن العميل أو الناقص فقط، " +
+      "وإلا فلخّصه باختصار واسألني ماذا أفعل به. لا تضف أصنافاً أو أسعاراً غير موجودة في الملف.";
+  await runAgent(msg, instruction, baseUrl);
+}
+
 const HELP = `أهلاً 👋 أنا مساعد الفوترة.
 اكتب لي طلبك بالعربي، مثلاً:
 • جهّز عرض سعر لشركة النور: 10 كابل شبكة و 2 راوتر
@@ -135,6 +247,7 @@ const HELP = `أهلاً 👋 أنا مساعد الفوترة.
 
 🎙 يمكنك أيضاً إرسال رسالة صوتية وسأفهمها وأنفذها كأنك كتبتها.
 📷 أو أرسل صورة (قائمة أصناف، فاتورة، عرض سعر) وسأقرأها، ويمكنك كتابة تعليق يوضح ما تريده منها.
+📄 أو أرسل ملفاً: Excel أو Word أو PDF أو CSV أو TXT (مثل قائمة أسعار أو طلب أصناف من جهة)، واكتب في التعليق ما تريده، مثلاً: «جهّز منه عرض سعر لشركة النور».
 
 الأوامر:
 /new بدء محادثة جديدة (مسح السياق)
@@ -231,6 +344,10 @@ async function processUpdate(update: TgUpdate, baseUrl: string) {
     await runAgent(msg, instruction, baseUrl);
     return;
   }
+  if (msg.document) {
+    await handleDocument(msg, text, baseUrl);
+    return;
+  }
   const voice = msg.voice ?? msg.audio;
   if (!text && voice) {
     if ((voice.duration ?? 0) > MAX_VOICE_SECONDS || (voice.file_size ?? 0) > MAX_VOICE_BYTES) {
@@ -254,7 +371,7 @@ async function processUpdate(update: TgUpdate, baseUrl: string) {
     return;
   }
   if (!text) {
-    await sendMessage(msg.chat.id, "أرسل طلبك كنص أو رسالة صوتية أو صورة من فضلك.", msg.message_id);
+    await sendMessage(msg.chat.id, "أرسل طلبك كنص أو رسالة صوتية أو صورة أو ملف (Excel، Word، PDF، CSV، TXT) من فضلك.", msg.message_id);
     return;
   }
   if (/^\/(start|help)\b/.test(text)) {
