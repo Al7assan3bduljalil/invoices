@@ -1,11 +1,18 @@
-import { generateText, stepCountIs, type ModelMessage } from "ai";
+import { stepCountIs, type ModelMessage } from "ai";
 import { getCurrentUser } from "@/server/current-user";
-import { aiEnabled, getModel } from "@/server/ai/model";
+import {
+  AI_MEDIA_MODEL_ID,
+  aiEnabled,
+  AiUnavailableError,
+  generateWithFallback,
+} from "@/server/ai/model";
 import { systemPrompt } from "@/server/ai/prompt";
-import { buildTools } from "@/server/ai/tools";
+import { buildTools, MUTATING_TOOLS } from "@/server/ai/tools";
+import { log, timer } from "@/server/log";
 import { downloadFile, sendChatAction, sendMessage, type TgMessage, type TgUpdate } from "./api";
 import { detectKind, extractText, fileExtension, type FileKind } from "./files";
 import { absolutize, markdownToTelegramHtml } from "./format";
+import { compactHistory } from "./history";
 
 /** معرّفات حسابات Telegram المسموح لها باستخدام البوت (TELEGRAM_ALLOWED_USER_IDS=123,456) */
 export function allowedUserIds(): Set<number> {
@@ -22,7 +29,6 @@ export function appBaseUrl(fallback?: string) {
 }
 
 // ---------- ذاكرة المحادثة (في الذاكرة؛ تُمسح عند إعادة التشغيل أو بالأمر /new) ----------
-const HISTORY_LIMIT = 40;
 const HISTORY_TTL_MS = 3 * 60 * 60 * 1000;
 type Session = { messages: ModelMessage[]; updatedAt: number };
 const g = globalThis as unknown as {
@@ -41,11 +47,39 @@ function getHistory(chatId: number): ModelMessage[] {
 }
 
 function saveHistory(chatId: number, messages: ModelMessage[]) {
-  let trimmed = messages.slice(-HISTORY_LIMIT);
-  // لا نبدأ السجل برسالة أداة أو رد مساعد يتيم: نبدأ من أول رسالة للمستخدم
-  const firstUser = trimmed.findIndex((m) => m.role === "user");
-  trimmed = firstUser > 0 ? trimmed.slice(firstUser) : trimmed;
-  sessions.set(chatId, { messages: trimmed, updatedAt: Date.now() });
+  // آخر أدوار المستخدم فقط، ونتائج الأدوات القديمة مختصرة (انظر history.ts)
+  sessions.set(chatId, { messages: compactHistory(messages), updatedAt: Date.now() });
+}
+
+/**
+ * قراءة وسائط (صوت، صورة، PDF) بنموذج المهام البسيطة مع مهلة وتحويل تلقائي عند الانشغال.
+ */
+async function readMedia(task: string, prompt: string, data: Uint8Array, mediaType: string) {
+  const elapsed = timer();
+  const { result, modelId, attempts } = await generateWithFallback(
+    {
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "file", data, mediaType },
+          ],
+        },
+      ],
+    },
+    { task, primary: AI_MEDIA_MODEL_ID },
+  );
+  log("info", "ai.media", {
+    task,
+    model: modelId,
+    attempts,
+    ms: elapsed(),
+    bytes: data.length,
+    inputTokens: result.usage.inputTokens,
+    outputTokens: result.usage.outputTokens,
+  });
+  return result.text.trim();
 }
 
 function telegramPrompt(base: string, appUrl: string) {
@@ -66,26 +100,15 @@ const MAX_VOICE_SECONDS = 180;
 async function transcribeVoice(msg: TgMessage): Promise<string> {
   const v = msg.voice ?? msg.audio!;
   const bytes = await downloadFile(v.file_id);
-  const { text } = await generateText({
-    model: getModel(),
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text:
+  return readMedia(
+    "voice",
               "فرّغ هذه الرسالة الصوتية حرفياً إلى نص. المتحدث يطلب من مساعد فوترة (عروض أسعار، أصناف، عملاء، فواتير)، " +
               "وغالباً بالعربية بلهجة عامية وقد يذكر أسماء أصناف وأرقاماً وأسعاراً. اكتب الأرقام بالأرقام (10 وليس عشرة) " +
               "وأبقِ أسماء الأصناف والعلامات التجارية كما نُطقت. أعد النص فقط بدون أي شرح. " +
               "إذا لم تسمع كلاماً واضحاً فأعد كلمة: [غير واضح]",
-          },
-          { type: "file", data: bytes, mediaType: v.mime_type || "audio/ogg" },
-        ],
-      },
-    ],
-  });
-  return text.trim();
+    bytes,
+    v.mime_type || "audio/ogg",
+  );
 }
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -106,26 +129,15 @@ function pickImage(msg: TgMessage): { fileId: string; mime: string; size: number
 /** قراءة الصورة (OCR + فهم) بواسطة Gemini وإرجاع النص الظاهر فيها منظماً */
 async function readImage(img: { fileId: string; mime: string }): Promise<string> {
   const bytes = await downloadFile(img.fileId);
-  const { text } = await generateText({
-    model: getModel(),
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text:
+  return readMedia(
+    "image",
               "استخرج كل النص الظاهر في هذه الصورة حرفياً وبترتيبه، بالعربية أو الإنجليزية. " +
               "إن كانت فاتورة أو عرض سعر أو قائمة أصناف فاكتب كل بند في سطر مستقل بالشكل: الصنف | الكمية | الوحدة | السعر (ما يظهر فقط) " +
               "واذكر اسم الجهة/العميل والتاريخ والإجمالي إن ظهرت. اكتب الأرقام كما تظهر ولا تخمّن أرقاماً غير واضحة (اكتب [غير واضح]). " +
               "إن لم يكن في الصورة نص فصف محتواها بجملة قصيرة. أعد النتيجة فقط بدون شرح.",
-          },
-          { type: "file", data: bytes, mediaType: img.mime },
-        ],
-      },
-    ],
-  });
-  return text.trim();
+    bytes,
+    img.mime,
+  );
 }
 
 // ---------- الملفات (Excel، Word، CSV، TXT، PDF...) ----------
@@ -135,25 +147,14 @@ const SUPPORTED_FILES = "Excel (xlsx)، Word (docx)، PowerPoint (pptx)، PDF، 
 
 /** قراءة ملف PDF بواسطة Gemini (يفهم PDF مباشرة بما فيه الممسوح ضوئياً) */
 async function readPdf(bytes: Uint8Array): Promise<string> {
-  const { text } = await generateText({
-    model: getModel(),
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text:
+  return readMedia(
+    "pdf",
               "استخرج كل النص في ملف PDF هذا حرفياً وبترتيبه، بالعربية أو الإنجليزية. " +
               "اكتب الجداول وقوائم الأصناف بحيث يكون كل صف في سطر مستقل والأعمدة مفصولة بـ | (مثل: الصنف | الكمية | الوحدة | السعر). " +
               "اكتب الأرقام كما تظهر ولا تخمّن أرقاماً غير واضحة (اكتب [غير واضح]). أعد النتيجة فقط بدون شرح.",
-          },
-          { type: "file", data: bytes, mediaType: "application/pdf" },
-        ],
-      },
-    ],
-  });
-  return text.trim();
+    bytes,
+    "application/pdf",
+  );
 }
 
 function kindLabel(kind: FileKind) {
@@ -205,7 +206,7 @@ async function handleDocument(msg: TgMessage, caption: string, baseUrl: string) 
     const bytes = await downloadFile(doc.file_id);
     extracted = kind === "pdf" ? await readPdf(bytes) : extractText(kind, bytes);
   } catch (err) {
-    console.error(`Telegram file reading failed (${kind}, ${name})`, err);
+    log("error", "tg.file_failed", { chatId, kind, name, error: err });
     await sendMessage(chatId, `تعذر قراءة الملف «${escHtml(name)}». تأكد أنه غير تالف وغير محمي بكلمة مرور.`, msg.message_id);
     return;
   }
@@ -258,6 +259,20 @@ async function reply(msg: TgMessage, markdown: string, baseUrl: string) {
   await sendMessage(msg.chat.id, markdownToTelegramHtml(md), msg.message_id);
 }
 
+/** رسالة خطأ مفهومة حسب السبب */
+function agentErrorMessage(kind: string) {
+  switch (kind) {
+    case "busy":
+      return "خدمة الذكاء الصناعي (Gemini) مزدحمة الآن وجرّبتُ النماذج البديلة دون نجاح. أعد إرسال طلبك بعد دقيقة.";
+    case "rate_limit":
+      return "تجاوزنا حد الاستخدام المسموح في Gemini مؤقتاً. أعد المحاولة بعد دقيقة أو دقيقتين.";
+    case "timeout":
+      return "استغرق الطلب وقتاً أطول من المسموح. جرّب تقسيمه إلى طلبات أصغر أو أعد إرساله.";
+    default:
+      return "تعذر تنفيذ الطلب الآن، حاول مرة أخرى بعد قليل.";
+  }
+}
+
 async function runAgent(msg: TgMessage, text: string, baseUrl: string) {
   const chatId = msg.chat.id;
   if (!aiEnabled()) {
@@ -270,28 +285,50 @@ async function runAgent(msg: TgMessage, text: string, baseUrl: string) {
 
   await sendChatAction(chatId);
   const typing = setInterval(() => void sendChatAction(chatId), 4500);
+  const elapsed = timer();
   try {
-    const result = await generateText({
-      model: getModel(),
-      system: telegramPrompt(
-        systemPrompt({
-          userName: user.name,
-          companyName: user.companyName,
-          currency: user.currency,
-          taxRate: Number(user.defaultTaxRate),
-        }),
-        baseUrl,
-      ),
-      messages: input,
-      tools: buildTools(user.id),
-      stopWhen: stepCountIs(12),
-    });
+    const { result, modelId, attempts } = await generateWithFallback(
+      {
+        system: telegramPrompt(
+          systemPrompt({
+            userName: user.name,
+            companyName: user.companyName,
+            currency: user.currency,
+            taxRate: Number(user.defaultTaxRate),
+          }),
+          baseUrl,
+        ),
+        messages: input,
+        tools: buildTools(user.id),
+        stopWhen: stepCountIs(12),
+      },
+      { task: "agent", mutatingTools: MUTATING_TOOLS },
+    );
     saveHistory(chatId, [...input, ...result.response.messages]);
     const answer = result.text.trim() || "تم ✅";
+    log("info", "tg.agent", {
+      chatId,
+      model: modelId,
+      attempts,
+      ms: elapsed(),
+      steps: result.steps.length,
+      tools: result.steps.flatMap((st) => st.toolCalls.map((c) => c.toolName)),
+      historyMessages: history.length,
+      inputTokens: result.totalUsage.inputTokens,
+      outputTokens: result.totalUsage.outputTokens,
+      cachedInputTokens: result.totalUsage.cachedInputTokens,
+      finishReason: result.finishReason,
+    });
     await reply(msg, answer, baseUrl);
   } catch (err) {
-    console.error("Telegram agent failed", err);
-    await reply(msg, "تعذر تنفيذ الطلب الآن، حاول مرة أخرى بعد قليل.", baseUrl);
+    const kind = err instanceof AiUnavailableError ? err.kind : "other";
+    log("error", "tg.agent_failed", {
+      chatId,
+      ms: elapsed(),
+      kind,
+      error: err instanceof AiUnavailableError ? err.cause : err,
+    });
+    await reply(msg, agentErrorMessage(kind), baseUrl);
   } finally {
     clearInterval(typing);
   }
@@ -308,7 +345,7 @@ async function processUpdate(update: TgUpdate, baseUrl: string) {
     return;
   }
   if (!allowed.has(msg.from.id)) {
-    console.warn(`Telegram: رسالة مرفوضة من حساب غير مصرح ${msg.from.id} (@${msg.from.username ?? "-"})`);
+    log("warn", "tg.unauthorized", { userId: msg.from.id, username: msg.from.username ?? null });
     await sendMessage(
       msg.chat.id,
       `هذا البوت خاص. معرّف حسابك: <code>${msg.from.id}</code>`,
@@ -327,7 +364,7 @@ async function processUpdate(update: TgUpdate, baseUrl: string) {
     try {
       extracted = aiEnabled() ? await readImage(image) : "";
     } catch (err) {
-      console.error("Telegram image reading failed", err);
+      log("error", "tg.image_failed", { chatId: msg.chat.id, error: err });
     }
     if (!extracted) {
       await sendMessage(msg.chat.id, "لم أستطع قراءة الصورة، أعد إرسالها بشكل أوضح أو اكتب طلبك.", msg.message_id);
@@ -359,7 +396,7 @@ async function processUpdate(update: TgUpdate, baseUrl: string) {
     try {
       heard = aiEnabled() ? await transcribeVoice(msg) : "";
     } catch (err) {
-      console.error("Telegram voice transcription failed", err);
+      log("error", "tg.voice_failed", { chatId: msg.chat.id, error: err });
     }
     if (!heard || heard === "[غير واضح]") {
       await sendMessage(msg.chat.id, "لم أستطع فهم الرسالة الصوتية، أعد إرسالها بصوت أوضح أو اكتب طلبك.", msg.message_id);
@@ -400,7 +437,9 @@ export function handleUpdate(update: TgUpdate, baseUrl: string): Promise<void> {
   const prev = queues.get(chatId) ?? Promise.resolve();
   const next = prev
     .then(() => processUpdate(update, baseUrl))
-    .catch((err: unknown) => console.error("Telegram update failed", err))
+    .catch((err: unknown) =>
+      log("error", "tg.update_failed", { chatId, updateId: update.update_id, error: err }),
+    )
     .finally(() => {
       if (queues.get(chatId) === next) queues.delete(chatId);
     });
