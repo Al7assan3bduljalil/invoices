@@ -99,6 +99,19 @@ const brief = (i: Awaited<ReturnType<typeof listInvoices>>[number]) => ({
   url: `/invoices/${i.id}`,
 });
 
+/** أقصى عدد مطابقات يُعاد لكل صنف في البحث الجماعي */
+const BATCH_MATCHES = 5;
+
+/** الأدوات التي تكتب في قاعدة البيانات: لا يُعاد الطلب على نموذج آخر بعد تنفيذ إحداها */
+export const MUTATING_TOOLS: ReadonlySet<string> = new Set([
+  "createClient",
+  "createProduct",
+  "createInvoice",
+  "updateInvoiceStatus",
+  "archiveInvoice",
+  "createLetter",
+]);
+
 export function buildTools(userId: string) {
   return {
     searchClients: tool({
@@ -129,6 +142,31 @@ export function buildTools(userId: string) {
         query: z.string().optional().describe("اسم المنتج أو وصفه أو كلمات منه، اتركه فارغاً لعرض الكل"),
       }),
       execute: async ({ query }) => (await findProducts(userId, query)).map(serializeProduct),
+    }),
+
+    searchProductsBatch: tool({
+      description:
+        "البحث عن عدة أصناف في الكتالوج دفعة واحدة (استدعاء واحد بدل استدعاء لكل صنف). " +
+        "استخدمها عند تجهيز عرض أو فاتورة فيها أكثر من صنف: مرّر كلمة مفتاحية مميزة لكل صنف، " +
+        "وتعيد لكل كلمة أفضل المطابقات بأسعارها. لصنف بلا نتيجة جرّب بعدها searchProducts بمرادف أو كلمة أقصر.",
+      inputSchema: z.object({
+        queries: z
+          .array(z.string().min(1))
+          .min(1)
+          .max(30)
+          .describe("كلمة بحث لكل صنف، مثل: [\"كابل شبكة\", \"راوتر\", \"كاميرا خارجية\"]"),
+      }),
+      execute: async ({ queries }) =>
+        Promise.all(
+          [...new Set(queries.map((q) => q.trim()).filter(Boolean))].map(async (query) => {
+            const rows = await findProducts(userId, query);
+            return {
+              query,
+              matches: rows.slice(0, BATCH_MATCHES).map(serializeProduct),
+              more: Math.max(0, rows.length - BATCH_MATCHES),
+            };
+          }),
+        ),
     }),
 
     createProduct: tool({
