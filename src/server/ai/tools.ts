@@ -9,6 +9,7 @@ import {
   refreshOverdue,
   setArchived,
   setInvoiceStatus,
+  setDueDate,
 } from "../invoices";
 import { serializeClient, serializeProduct } from "../serialize";
 import { createLetter, listLetters } from "../letters";
@@ -94,7 +95,7 @@ const brief = (i: Awaited<ReturnType<typeof listInvoices>>[number]) => ({
   total: i.total,
   currency: i.currency,
   issueDate: i.issueDate.slice(0, 10),
-  dueDate: i.dueDate.slice(0, 10),
+  dueDate: i.dueDate?.slice(0, 10) ?? null,
   archived: i.archivedAt != null,
   url: `/invoices/${i.id}`,
 });
@@ -219,7 +220,7 @@ export function buildTools(userId: string) {
         currency: z.string().length(3).optional().describe("رمز العملة مثل USD أو SAR"),
         taxRate: z.number().min(0).max(100).optional().describe("نسبة الضريبة %، الافتراضي من إعدادات التاجر"),
         discount: z.number().min(0).optional().describe("قيمة الخصم"),
-        dueInDays: z.number().int().min(0).default(30),
+        dueInDays: z.number().int().min(0).nullable().default(30).describe("أيام الاستحقاق من اليوم؛ null = بدون تاريخ استحقاق"),
         status: z.enum(["DRAFT", "SENT"]).default("DRAFT"),
         notes: z.string().optional(),
       }),
@@ -242,7 +243,7 @@ export function buildTools(userId: string) {
           };
         });
         const issueDate = new Date();
-        const dueDate = new Date(issueDate.getTime() + input.dueInDays * 86400000);
+        const dueDate = input.dueInDays == null ? null : new Date(issueDate.getTime() + input.dueInDays * 86400000);
         const inv = await createInvoice(
           userId,
           {
@@ -304,7 +305,7 @@ export function buildTools(userId: string) {
           total: Number(i.total),
           currency: i.currency,
           issueDate: i.issueDate.toISOString().slice(0, 10),
-          dueDate: i.dueDate.toISOString().slice(0, 10),
+          dueDate: i.dueDate?.toISOString().slice(0, 10) ?? null,
           archived: i.archivedAt != null,
           archivedAt: i.archivedAt?.toISOString().slice(0, 10) ?? null,
           url: `/invoices/${i.id}`,
@@ -391,6 +392,24 @@ export function buildTools(userId: string) {
         const inv = await prisma.invoice.findFirst({ where: { userId, number: invoiceNumber } });
         if (!inv) return { error: "الفاتورة غير موجودة" };
         return brief(await setInvoiceStatus(userId, inv.id, status));
+      },
+    }),
+
+    updateInvoiceDueDate: tool({
+      description:
+        "تعديل تاريخ الاستحقاق لفاتورة أو إلغاؤه. dueDate بصيغة YYYY-MM-DD، أو null لإلغاء تاريخ الاستحقاق.",
+      inputSchema: z.object({
+        invoiceNumber: z.string().describe("رقم الفاتورة مثل INV-2026-0001"),
+        dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+      }),
+      execute: async ({ invoiceNumber, dueDate }) => {
+        const inv = await prisma.invoice.findFirst({ where: { userId, number: invoiceNumber } });
+        if (!inv) return { error: "الفاتورة غير موجودة" };
+        try {
+          return brief(await setDueDate(userId, inv.id, dueDate ? new Date(dueDate) : null));
+        } catch (e) {
+          return { error: e instanceof Error ? e.message : "تعذر تعديل تاريخ الاستحقاق" };
+        }
       },
     }),
 

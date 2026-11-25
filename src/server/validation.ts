@@ -38,7 +38,8 @@ export const invoiceSchema = z.object({
   clientId: z.string().min(1, "اختر العميل"),
   status: z.enum(INVOICE_STATUSES).default("DRAFT"),
   issueDate: z.coerce.date(),
-  dueDate: z.coerce.date(),
+  /** فارغ أو null = بلا تاريخ استحقاق */
+  dueDate: z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.date().nullable()).default(null),
   currency: z.string().trim().length(3).default("USD"),
   exchangeRate: z.coerce.number().positive().optional().nullable(),
   exchangeCurrency: z.string().trim().length(3).optional(),

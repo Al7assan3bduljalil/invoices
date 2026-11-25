@@ -37,7 +37,7 @@ export function LetterheadDocument({
         <dl className="lh-meta">
           <div><dt>{L.number}</dt><dd dir="ltr">{inv.number}</dd></div>
           <div><dt>{L.date}</dt><dd>{formatDate(inv.issueDate)}</dd></div>
-          <div><dt>{L.due}</dt><dd>{formatDate(inv.dueDate)}</dd></div>
+          {inv.dueDate && <div><dt>{L.due}</dt><dd>{formatDate(inv.dueDate)}</dd></div>}
         </dl>
       </div>
 
@@ -81,7 +81,7 @@ export function LetterheadDocument({
 
       <div className="lh-bottom">
         <div className="lh-notes">
-          {kind === "quote" && T.quoteValidity && (
+          {kind === "quote" && T.quoteValidity && inv.dueDate && (
             <p><strong>صلاحية العرض:</strong> {T.quoteValidity.replaceAll("{date}", formatDate(inv.dueDate))}</p>
           )}
           {inv.notes && (

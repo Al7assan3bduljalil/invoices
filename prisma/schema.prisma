@@ -92,7 +92,8 @@ model Invoice {
   number         String
   status         InvoiceStatus @default(DRAFT)
   issueDate      DateTime      @default(now())
-  dueDate        DateTime
+  /// تاريخ الاستحقاق — اختياري: null يعني بلا تاريخ استحقاق (لا يظهر في الطباعة)
+  dueDate        DateTime?
   currency       String        @default("USD")
   /// سعر الصرف: كم يساوي 1 من عملة الفاتورة بعملة الصرف (مثلاً 1 USD = 4.85 LYD)
   exchangeRate     Decimal?    @db.Decimal(14, 4)
