@@ -25,6 +25,17 @@ function startOfToday() {
   return d;
 }
 
+function assertDueDate(issueDate: Date, dueDate: Date | null) {
+  if (dueDate && dueDate < issueDate)
+    throw new HttpError(400, "تاريخ الاستحقاق يجب أن يكون بعد تاريخ الإصدار");
+}
+
+/** فاتورة "متأخرة" أُلغي تاريخ استحقاقها أو مُدِّد إلى اليوم أو بعده تعود "مُرسلة" */
+function adjustOverdue(status: InvoiceStatus, dueDate: Date | null): InvoiceStatus {
+  if (status === "OVERDUE" && (!dueDate || dueDate >= startOfToday())) return "SENT";
+  return status;
+}
+
 function buildItems(input: InvoiceInput) {
   const totals = calcTotals(input.items, input.taxRate, input.discount);
   const items = input.items.map((it, idx) => ({
@@ -96,8 +107,7 @@ export async function createInvoice(
 ) {
   const client = await prisma.client.findFirst({ where: { id: input.clientId, userId } });
   if (!client) throw new HttpError(400, "العميل غير موجود");
-  if (input.dueDate < input.issueDate)
-    throw new HttpError(400, "تاريخ الاستحقاق يجب أن يكون بعد تاريخ الإصدار");
+  assertDueDate(input.issueDate, input.dueDate);
 
   const { totals, items } = buildItems(input);
 
@@ -114,7 +124,7 @@ export async function createInvoice(
         userId,
         clientId: input.clientId,
         number,
-        status: input.status,
+        status: adjustOverdue(input.status, input.dueDate),
         issueDate: input.issueDate,
         dueDate: input.dueDate,
         currency: input.currency,
@@ -126,7 +136,7 @@ export async function createInvoice(
         total: totals.total,
         notes: input.notes,
         createdByAI: opts.createdByAI ?? false,
-        ...statusSideEffects(input.status),
+        ...statusSideEffects(adjustOverdue(input.status, input.dueDate)),
         items: { create: items },
       },
       include: invoiceInclude,
@@ -140,8 +150,7 @@ export async function updateInvoice(userId: string, id: string, input: InvoiceIn
   if (!existing) throw new HttpError(404, "الفاتورة غير موجودة");
   const client = await prisma.client.findFirst({ where: { id: input.clientId, userId } });
   if (!client) throw new HttpError(400, "العميل غير موجود");
-  if (input.dueDate < input.issueDate)
-    throw new HttpError(400, "تاريخ الاستحقاق يجب أن يكون بعد تاريخ الإصدار");
+  assertDueDate(input.issueDate, input.dueDate);
 
   const { totals, items } = buildItems(input);
   const inv = await prisma.$transaction(async (tx) => {
@@ -150,7 +159,7 @@ export async function updateInvoice(userId: string, id: string, input: InvoiceIn
       where: { id },
       data: {
         clientId: input.clientId,
-        status: input.status,
+        status: adjustOverdue(input.status, input.dueDate),
         issueDate: input.issueDate,
         dueDate: input.dueDate,
         currency: input.currency,
@@ -161,7 +170,7 @@ export async function updateInvoice(userId: string, id: string, input: InvoiceIn
         taxAmount: totals.taxAmount,
         total: totals.total,
         notes: input.notes,
-        ...statusSideEffects(input.status, existing),
+        ...statusSideEffects(adjustOverdue(input.status, input.dueDate), existing),
         items: { create: items },
       },
       include: invoiceInclude,
@@ -204,6 +213,21 @@ export async function setInvoiceStatus(userId: string, id: string, status: Invoi
   const inv = await prisma.invoice.update({
     where: { id },
     data: { status, ...statusSideEffects(status, existing) },
+    include: invoiceInclude,
+  });
+  return serializeInvoice(inv);
+}
+
+/** تعديل تاريخ الاستحقاق أو إلغاؤه (null) دون المرور بنموذج التعديل الكامل */
+export async function setDueDate(userId: string, id: string, dueDate: Date | null) {
+  const existing = await prisma.invoice.findFirst({ where: { id, userId } });
+  if (!existing) throw new HttpError(404, "الفاتورة غير موجودة");
+  assertDueDate(existing.issueDate, dueDate);
+  let status = adjustOverdue(existing.status, dueDate);
+  if (status === "SENT" && dueDate && dueDate < startOfToday()) status = "OVERDUE";
+  const inv = await prisma.invoice.update({
+    where: { id },
+    data: { dueDate, status },
     include: invoiceInclude,
   });
   return serializeInvoice(inv);

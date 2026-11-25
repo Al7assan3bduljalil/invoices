@@ -15,7 +15,7 @@ export async function reminderContext(userId: string, where: { id?: string; numb
   if (!inv) throw new HttpError(404, "الفاتورة غير موجودة");
   const daysOverdue = Math.max(
     0,
-    Math.floor((Date.now() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24)),
+    inv.dueDate ? Math.floor((Date.now() - inv.dueDate.getTime()) / (1000 * 60 * 60 * 24)) : 0,
   );
   return {
     invoiceNumber: inv.number,
@@ -24,7 +24,7 @@ export async function reminderContext(userId: string, where: { id?: string; numb
     clientEmail: inv.client.email,
     total: formatMoney(Number(inv.total), inv.currency),
     issueDate: formatDate(inv.issueDate),
-    dueDate: formatDate(inv.dueDate),
+    dueDate: inv.dueDate ? formatDate(inv.dueDate) : null,
     daysOverdue,
     senderName: inv.user.name,
     companyName: inv.user.companyName ?? inv.user.name,
@@ -42,7 +42,7 @@ function templateReminder(c: Ctx): ReminderDraft {
       ``,
       `تحية طيبة وبعد،`,
       ``,
-      `نود تذكيركم بأن الفاتورة رقم ${c.invoiceNumber} الصادرة بتاريخ ${c.issueDate} بمبلغ ${c.total} قد استحقت بتاريخ ${c.dueDate}${c.daysOverdue ? ` (متأخرة ${c.daysOverdue} يوماً)` : ""}.`,
+      `نود تذكيركم بأن الفاتورة رقم ${c.invoiceNumber} الصادرة بتاريخ ${c.issueDate} بمبلغ ${c.total} ${c.dueDate ? `قد استحقت بتاريخ ${c.dueDate}` : "ما زالت بانتظار السداد"}${c.daysOverdue ? ` (متأخرة ${c.daysOverdue} يوماً)` : ""}.`,
       ``,
       `نرجو التكرم بإتمام السداد في أقرب وقت ممكن. وإذا كنتم قد قمتم بالسداد بالفعل فيرجى تجاهل هذه الرسالة مع خالص شكرنا.`,
       ``,

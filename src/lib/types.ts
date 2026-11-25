@@ -37,7 +37,7 @@ export type InvoiceDTO = {
   number: string;
   status: InvoiceStatusValue;
   issueDate: string;
-  dueDate: string;
+  dueDate: string | null;
   currency: string;
   exchangeRate: number | null;
   exchangeCurrency: string;

@@ -50,7 +50,7 @@ export function serializeInvoice(
     number: inv.number,
     status: inv.status,
     issueDate: inv.issueDate.toISOString(),
-    dueDate: inv.dueDate.toISOString(),
+    dueDate: iso(inv.dueDate),
     currency: inv.currency,
     exchangeRate: inv.exchangeRate == null ? null : num(inv.exchangeRate),
     exchangeCurrency: inv.exchangeCurrency,

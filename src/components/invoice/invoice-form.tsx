@@ -38,7 +38,7 @@ export function InvoiceForm({ invoice, clients, products }: Props) {
   const [clientId, setClientId] = useState(invoice?.client.id ?? "");
   const [status, setStatus] = useState<InvoiceStatusValue>(invoice?.status ?? "DRAFT");
   const [issueDate, setIssueDate] = useState(invoice ? toDateInput(invoice.issueDate) : toDateInput(new Date().toISOString()));
-  const [dueDate, setDueDate] = useState(invoice ? toDateInput(invoice.dueDate) : toDateInput(new Date(Date.now() + 30 * 86400000).toISOString()));
+  const [dueDate, setDueDate] = useState(invoice ? (invoice.dueDate ? toDateInput(invoice.dueDate) : "") : toDateInput(new Date(Date.now() + 30 * 86400000).toISOString()));
   const [currency, setCurrency] = useState(invoice?.currency ?? "USD");
   const [taxRate, setTaxRate] = useState(invoice?.taxRate ?? 15);
   const [discount, setDiscount] = useState(invoice?.discount ?? 0);
@@ -70,7 +70,7 @@ export function InvoiceForm({ invoice, clients, products }: Props) {
     setSaving(true);
     try {
       const payload = {
-        clientId, status, issueDate, dueDate, currency,
+        clientId, status, issueDate, dueDate: dueDate || null, currency,
         taxRate, discount, notes: notes || null,
         items: items.filter((i) => i.description.trim()),
       };
@@ -120,7 +120,21 @@ export function InvoiceForm({ invoice, clients, products }: Props) {
           </div>
           <div className="space-y-1.5">
             <Label>تاريخ الاستحقاق</Label>
-            <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            {dueDate ? (
+              <div className="flex gap-1">
+                <Input type="date" value={dueDate} min={issueDate} onChange={(e) => setDueDate(e.target.value)} />
+                <Button type="button" variant="ghost" size="sm" className="text-destructive shrink-0"
+                  onClick={() => setDueDate("")} title="إلغاء تاريخ الاستحقاق">✕ إلغاء</Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 h-9">
+                <span className="text-sm text-muted-foreground">بدون تاريخ استحقاق</span>
+                <Button type="button" variant="outline" size="sm"
+                  onClick={() => setDueDate(toDateInput(new Date(new Date(issueDate || Date.now()).getTime() + 30 * 86400000).toISOString()))}>
+                  + إضافة
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

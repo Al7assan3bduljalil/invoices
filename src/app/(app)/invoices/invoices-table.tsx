@@ -72,7 +72,7 @@ export function InvoicesTable({ invoices: initial }: { invoices: InvoiceDTO[] })
                 </TableCell>
                 <TableCell className="font-medium">{inv.client.name}</TableCell>
                 <TableCell className="text-muted-foreground text-sm">{formatDate(inv.issueDate)}</TableCell>
-                <TableCell className="text-muted-foreground text-sm">{formatDate(inv.dueDate)}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">{inv.dueDate ? formatDate(inv.dueDate) : "—"}</TableCell>
                 <TableCell className="text-end tabular-nums font-medium">{formatMoney(inv.total, inv.currency)}</TableCell>
                 <TableCell><StatusBadge status={inv.status} /></TableCell>
                 <TableCell>
